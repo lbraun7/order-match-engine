@@ -8,11 +8,11 @@ storage concerns.
 
 ## Current scope
 
-The repository currently includes the foundation and domain phases. It provides
-validated integer value types, order enums, orders, trades, placement and
-cancellation commands, stable domain errors, and automated quality checks.
-Matching, persistence, and APIs will be introduced incrementally according to
-the local roadmap.
+The repository currently includes the foundation, domain, and limit-order
+matching phases. It provides validated integer value types, order enums,
+orders, trades, commands, stable domain errors, and an in-memory order book
+with price-time priority. Cancellation, persistence, and APIs will be
+introduced incrementally according to the local roadmap.
 
 The initial architecture separates the executable from the core packages:
 
@@ -38,8 +38,15 @@ observability remain outside the core.
   fill and cancellation transitions. A rejected transition leaves the order
   unchanged.
 - Domain errors are stable sentinel values and can be matched with `errors.Is`.
-- Phase 1 accepts limit orders. The time-in-force vocabulary already includes
-  GTC, IOC, and FOK; their execution semantics are implemented in later phases.
+- The matcher accepts GTC limit orders. The time-in-force vocabulary already
+  includes IOC and FOK, but the matcher rejects them explicitly until their
+  execution semantics are implemented.
+- Bids are ordered from highest to lowest price and asks from lowest to highest.
+  Orders at the same price execute FIFO by their engine-assigned sequence.
+- Trades execute at the resting maker's price. Accepted orders and trades share
+  one monotonic sequence; the decimal trade ID is derived from its sequence.
+- `OrderBook` is intentionally not concurrency-safe. Its single-writer command
+  loop is introduced in phase 4.
 
 ## Requirements
 
