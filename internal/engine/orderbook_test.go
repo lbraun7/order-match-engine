@@ -143,6 +143,106 @@ func TestRejectedOrderDoesNotConsumeSequence(t *testing.T) {
 	}
 }
 
+func TestCancelOrderAtBeginningMiddleAndEndPreservesFIFO(t *testing.T) {
+	for _, canceled := range []domain.OrderID{"first", "middle", "last"} {
+		t.Run(string(canceled), func(t *testing.T) {
+			book := NewOrderBook()
+			for _, id := range []domain.OrderID{"first", "middle", "last"} {
+				place(t, book, id, domain.SideSell, 100, 2)
+			}
+			got, err := book.CancelOrder(domain.CancelOrder{OrderID: canceled})
+			if err != nil || got.Status != domain.OrderStatusCanceled || got.RemainingQuantity != 2 {
+				t.Fatalf("cancel = %+v, %v", got, err)
+			}
+
+			_, trades := place(t, book, "buyer", domain.SideBuy, 100, 4)
+			want := make([]domain.OrderID, 0, 2)
+			for _, id := range []domain.OrderID{"first", "middle", "last"} {
+				if id != canceled {
+					want = append(want, id)
+				}
+			}
+			assertTradeMakers(t, trades, want)
+			if _, active := book.active[canceled]; active {
+				t.Fatal("canceled order remained in active index")
+			}
+		})
+	}
+}
+
+func TestCancelRemovesEmptyPriceLevel(t *testing.T) {
+	book := NewOrderBook()
+	place(t, book, "best", domain.SideBuy, 101, 1)
+	place(t, book, "next", domain.SideBuy, 100, 1)
+	if _, err := book.CancelOrder(domain.CancelOrder{OrderID: "best"}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []domain.Price{100}; !reflect.DeepEqual(book.bids.prices, want) {
+		t.Fatalf("bid prices = %v, want %v", book.bids.prices, want)
+	}
+	if _, exists := book.bids.levels[101]; exists {
+		t.Fatal("empty price level remained indexed")
+	}
+}
+
+func TestCancelOrderErrors(t *testing.T) {
+	book := NewOrderBook()
+	if _, err := book.CancelOrder(domain.CancelOrder{OrderID: "missing"}); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("missing error = %v", err)
+	}
+	if _, err := book.CancelOrder(domain.CancelOrder{}); !errors.Is(err, domain.ErrInvalidOrderID) {
+		t.Fatalf("invalid error = %v", err)
+	}
+
+	place(t, book, "cancel", domain.SideBuy, 90, 1)
+	if _, err := book.CancelOrder(domain.CancelOrder{OrderID: "cancel"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := book.CancelOrder(domain.CancelOrder{OrderID: "cancel"}); !errors.Is(err, domain.ErrOrderNotOpen) {
+		t.Fatalf("second cancel error = %v", err)
+	}
+
+	place(t, book, "maker", domain.SideSell, 100, 1)
+	place(t, book, "taker", domain.SideBuy, 100, 1)
+	if _, err := book.CancelOrder(domain.CancelOrder{OrderID: "maker"}); !errors.Is(err, domain.ErrOrderNotOpen) {
+		t.Fatalf("filled cancel error = %v", err)
+	}
+}
+
+func TestGetOrderAndSnapshot(t *testing.T) {
+	book := NewOrderBook()
+	place(t, book, "b1", domain.SideBuy, 100, 2)
+	place(t, book, "b2", domain.SideBuy, 100, 3)
+	place(t, book, "b3", domain.SideBuy, 99, 4)
+	place(t, book, "a1", domain.SideSell, 105, 5)
+
+	order, err := book.GetOrder("b2")
+	if err != nil || order.ID != "b2" || order.RemainingQuantity != 3 || order.Status != domain.OrderStatusOpen {
+		t.Fatalf("order = %+v, %v", order, err)
+	}
+	if _, err := book.GetOrder("unknown"); !errors.Is(err, ErrOrderNotFound) {
+		t.Fatalf("unknown order error = %v", err)
+	}
+
+	snapshot := book.Snapshot()
+	if snapshot.Sequence != 4 || len(snapshot.Bids) != 2 || len(snapshot.Asks) != 1 {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	if snapshot.Bids[0].Price != 100 || snapshot.Bids[0].TotalQuantity != 5 {
+		t.Fatalf("best bid = %+v", snapshot.Bids[0])
+	}
+	if got := []domain.OrderID{snapshot.Bids[0].Orders[0].ID, snapshot.Bids[0].Orders[1].ID}; !reflect.DeepEqual(got, []domain.OrderID{"b1", "b2"}) {
+		t.Fatalf("FIFO order = %v", got)
+	}
+
+	// Returned slices are independent of the live book.
+	snapshot.Bids[0].Orders[0].RemainingQuantity = 999
+	fresh, _ := book.GetOrder("b1")
+	if fresh.RemainingQuantity != 2 {
+		t.Fatal("snapshot mutation changed live order")
+	}
+}
+
 func place(t *testing.T, book *OrderBook, id domain.OrderID, side domain.Side, price domain.Price, quantity domain.Quantity) (*domain.Order, []domain.Trade) {
 	t.Helper()
 	order, trades, err := book.PlaceOrder(command(id, side, price, quantity))

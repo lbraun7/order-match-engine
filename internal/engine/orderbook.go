@@ -12,8 +12,37 @@ import (
 
 var (
 	ErrDuplicateOrderID       = errors.New("duplicate order ID")
+	ErrOrderNotFound          = errors.New("order not found")
 	ErrUnsupportedTimeInForce = errors.New("unsupported time in force")
 )
+
+// OrderSnapshot is an immutable view of an order at query time.
+type OrderSnapshot struct {
+	ID                domain.OrderID
+	Sequence          domain.Sequence
+	Side              domain.Side
+	Type              domain.OrderType
+	TimeInForce       domain.TimeInForce
+	Price             domain.Price
+	OriginalQuantity  domain.Quantity
+	RemainingQuantity domain.Quantity
+	ExecutedQuantity  domain.Quantity
+	Status            domain.OrderStatus
+}
+
+// PriceLevelSnapshot contains resting orders in FIFO execution order.
+type PriceLevelSnapshot struct {
+	Price         domain.Price
+	TotalQuantity domain.Quantity
+	Orders        []OrderSnapshot
+}
+
+// BookSnapshot is a point-in-time copy of the visible order book.
+type BookSnapshot struct {
+	Sequence domain.Sequence
+	Bids     []PriceLevelSnapshot
+	Asks     []PriceLevelSnapshot
+}
 
 // OrderBook is a deterministic, in-memory limit order book. It is deliberately
 // not concurrency-safe: a later engine layer owns its single-writer lifecycle.
@@ -71,6 +100,63 @@ func (b *OrderBook) PlaceOrder(command domain.PlaceOrder) (*domain.Order, []doma
 		b.rest(order)
 	}
 	return order, trades, nil
+}
+
+// CancelOrder removes a resting order while preserving the FIFO order of the
+// other entries at its price. Filled and already canceled orders are rejected
+// by the domain transition with domain.ErrOrderNotOpen.
+func (b *OrderBook) CancelOrder(command domain.CancelOrder) (OrderSnapshot, error) {
+	if err := command.Validate(); err != nil {
+		return OrderSnapshot{}, err
+	}
+	order, exists := b.orders[command.OrderID]
+	if !exists {
+		return OrderSnapshot{}, fmt.Errorf("%s: %w", command.OrderID, ErrOrderNotFound)
+	}
+	location, active := b.active[command.OrderID]
+	if !active {
+		if err := order.Cancel(); err != nil {
+			return OrderSnapshot{}, fmt.Errorf("%s: %w", command.OrderID, err)
+		}
+		panic("engine invariant violated: open order missing from active index")
+	}
+
+	side := b.side(location.side)
+	level := side.levels[location.price]
+	if level == nil {
+		panic("engine invariant violated: active order missing price level")
+	}
+	if err := order.Cancel(); err != nil {
+		return OrderSnapshot{}, fmt.Errorf("%s: %w", command.OrderID, err)
+	}
+	level.Remove(location.element)
+	delete(b.active, command.OrderID)
+	if level.Len() == 0 {
+		delete(side.levels, location.price)
+		removePrice(side, location.price)
+	}
+	return snapshotOrder(order), nil
+}
+
+// GetOrder returns a copy of any accepted order, including terminal orders.
+func (b *OrderBook) GetOrder(id domain.OrderID) (OrderSnapshot, error) {
+	if err := id.Validate(); err != nil {
+		return OrderSnapshot{}, err
+	}
+	order, exists := b.orders[id]
+	if !exists {
+		return OrderSnapshot{}, fmt.Errorf("%s: %w", id, ErrOrderNotFound)
+	}
+	return snapshotOrder(order), nil
+}
+
+// Snapshot copies both sides in price priority and each level in FIFO order.
+func (b *OrderBook) Snapshot() BookSnapshot {
+	return BookSnapshot{
+		Sequence: b.nextSequence,
+		Bids:     snapshotSide(&b.bids),
+		Asks:     snapshotSide(&b.asks),
+	}
 }
 
 func (b *OrderBook) match(taker *domain.Order) []domain.Trade {
@@ -147,6 +233,47 @@ func (b *OrderBook) rest(order *domain.Order) {
 func (b *OrderBook) allocateSequence() domain.Sequence {
 	b.nextSequence++
 	return b.nextSequence
+}
+
+func (b *OrderBook) side(side domain.Side) *bookSide {
+	if side == domain.SideSell {
+		return &b.asks
+	}
+	return &b.bids
+}
+
+func removePrice(side *bookSide, price domain.Price) {
+	for i, candidate := range side.prices {
+		if candidate == price {
+			copy(side.prices[i:], side.prices[i+1:])
+			side.prices = side.prices[:len(side.prices)-1]
+			return
+		}
+	}
+	panic("engine invariant violated: price level missing from sorted index")
+}
+
+func snapshotOrder(order *domain.Order) OrderSnapshot {
+	return OrderSnapshot{
+		ID: order.ID(), Sequence: order.Sequence(), Side: order.Side(), Type: order.Type(),
+		TimeInForce: order.TimeInForce(), Price: order.Price(),
+		OriginalQuantity: order.OriginalQuantity(), RemainingQuantity: order.RemainingQuantity(),
+		ExecutedQuantity: order.ExecutedQuantity(), Status: order.Status(),
+	}
+}
+
+func snapshotSide(side *bookSide) []PriceLevelSnapshot {
+	levels := make([]PriceLevelSnapshot, 0, len(side.prices))
+	for _, price := range side.prices {
+		level := PriceLevelSnapshot{Price: price}
+		for element := side.levels[price].Front(); element != nil; element = element.Next() {
+			order := snapshotOrder(element.Value.(*domain.Order))
+			level.Orders = append(level.Orders, order)
+			level.TotalQuantity += order.RemainingQuantity
+		}
+		levels = append(levels, level)
+	}
+	return levels
 }
 
 func crosses(takerSide domain.Side, takerPrice, makerPrice domain.Price) bool {

@@ -8,10 +8,11 @@ storage concerns.
 
 ## Current scope
 
-The repository currently includes the foundation, domain, and limit-order
-matching phases. It provides validated integer value types, order enums,
-orders, trades, commands, stable domain errors, and an in-memory order book
-with price-time priority. Cancellation, persistence, and APIs will be
+The repository currently includes the foundation, domain, limit-order
+matching, cancellation, and query phases. It provides validated integer value
+types, order enums, orders, trades, commands, stable domain errors, and an
+in-memory order book with price-time priority. Order queries and consistent
+book snapshots return immutable value copies. Persistence and APIs will be
 introduced incrementally according to the local roadmap.
 
 The initial architecture separates the executable from the core packages:
@@ -47,6 +48,10 @@ observability remain outside the core.
   one monotonic sequence; the decimal trade ID is derived from its sequence.
 - `OrderBook` is intentionally not concurrency-safe. Its single-writer command
   loop is introduced in phase 4.
+- Cancellation removes an active order through its indexed list element, keeps
+  the remaining price level FIFO, and removes empty price levels.
+- Order queries include terminal orders. Book snapshots contain price-priority
+  levels, aggregate remaining quantity, and resting orders in FIFO order.
 
 ## Requirements
 
@@ -61,6 +66,7 @@ gofmt -w .
 go test ./...
 go vet ./...
 go test -race ./...
+go test -run '^$' -bench . -benchmem ./internal/engine
 ```
 
 Formatting follows `gofmt`. Code must pass `go vet`, tests, and the race
