@@ -135,6 +135,9 @@ func (b *OrderBook) CancelOrder(command domain.CancelOrder) (OrderSnapshot, erro
 		delete(side.levels, location.price)
 		removePrice(side, location.price)
 	}
+	// Cancellations mutate visible market state and therefore consume a
+	// sequence just like accepted orders and trades.
+	b.allocateSequence()
 	return snapshotOrder(order), nil
 }
 

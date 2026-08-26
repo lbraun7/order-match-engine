@@ -9,18 +9,20 @@ storage concerns.
 ## Current scope
 
 The repository currently includes the foundation, domain, limit-order
-matching, cancellation, queries, and the single-writer engine. It provides a
-bounded command queue with explicit overload errors, context-aware operations,
-and graceful shutdown. Order queries and consistent book snapshots return
-immutable value copies. Persistence and APIs will be introduced incrementally
-according to the local roadmap.
+matching, cancellation, queries, the single-writer engine, and a versioned
+gRPC API with market-data streaming. It provides a bounded command queue with
+explicit overload errors, context-aware operations, and graceful shutdown.
+Order queries and consistent book snapshots return immutable value copies.
+Persistence will be introduced incrementally according to the local roadmap.
 
 The initial architecture separates the executable from the core packages:
 
 ```text
 cmd/order-match-engine/  application entry point
+api/v1/                  protobuf contract and generated Go API
 internal/domain/         domain types and invariants
 internal/engine/         order matching and command processing
+internal/grpcserver/     transport, idempotency, and market data
 ```
 
 The core uses integers for prices and quantities, assigns ordering sequences
@@ -44,8 +46,9 @@ observability remain outside the core.
   execution semantics are implemented.
 - Bids are ordered from highest to lowest price and asks from lowest to highest.
   Orders at the same price execute FIFO by their engine-assigned sequence.
-- Trades execute at the resting maker's price. Accepted orders and trades share
-  one monotonic sequence; the decimal trade ID is derived from its sequence.
+- Trades execute at the resting maker's price. Accepted orders, trades, and
+  successful cancellations share one monotonic sequence; the decimal trade ID
+  is derived from its sequence.
 - `OrderBook` is intentionally not concurrency-safe and is owned by the
   `Engine` goroutine when used concurrently.
 - The engine serializes placement, cancellation, and queries through a bounded
@@ -63,6 +66,34 @@ observability remain outside the core.
 - Go 1.24 or newer
 
 ## Development
+
+Start the service on its default gRPC address (`:50051`):
+
+```sh
+go run ./cmd/order-match-engine
+```
+
+`PlaceOrder` requires a `client_order_id`. Repeating the same ID and payload
+returns the original response without touching the engine; reusing it with a
+different payload returns `ALREADY_EXISTS`. This registry is process-local and
+will become durable with the event-log phase.
+
+Every market-data subscription receives a book snapshot first. Each delta has
+`previous_sequence` and `sequence` high-water marks and can include an accepted
+order plus all trades it generated. A mismatch is a gap, so the client must
+reconnect for a fresh snapshot. A subscriber whose bounded buffer fills is
+disconnected with `RESOURCE_EXHAUSTED` instead of silently losing messages.
+
+Regenerate the checked-in protobuf bindings with:
+
+```sh
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+PATH="$(go env GOPATH)/bin:$PATH" protoc \
+  --go_out=. --go_opt=paths=source_relative \
+  --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+  api/v1/order_match.proto
+```
 
 Run the same checks used by continuous integration:
 
