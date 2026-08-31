@@ -5,7 +5,9 @@ import (
 	"flag"
 	"log"
 	"net"
+	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,9 +21,18 @@ func main() {
 	address := flag.String("address", ":50051", "gRPC listen address")
 	queueCapacity := flag.Int("queue-capacity", 1024, "engine command queue capacity")
 	subscriberBuffer := flag.Int("subscriber-buffer", grpcserver.DefaultSubscriberBuffer, "market-data updates buffered per subscriber")
+	dataDirectory := flag.String("data-dir", "data", "directory for the event log and recovery snapshot")
+	snapshotInterval := flag.Uint64("snapshot-interval", 1000, "accepted commands between recovery snapshots; zero disables snapshots")
 	flag.Parse()
 
-	matchingEngine, err := engine.NewEngine(*queueCapacity)
+	if err := os.MkdirAll(*dataDirectory, 0o700); err != nil {
+		log.Fatal(err)
+	}
+	matchingEngine, err := engine.NewPersistentEngine(*queueCapacity, engine.PersistenceConfig{
+		LogPath:          filepath.Join(*dataDirectory, "events.log"),
+		SnapshotPath:     filepath.Join(*dataDirectory, "snapshot.json"),
+		SnapshotInterval: *snapshotInterval,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"container/list"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -74,18 +75,39 @@ func NewOrderBook() *OrderBook {
 	}
 }
 
+func (b *OrderBook) canPlace(command domain.PlaceOrder) error {
+	if err := command.Validate(); err != nil {
+		return err
+	}
+	if command.TimeInForce != domain.TimeInForceGTC {
+		return ErrUnsupportedTimeInForce
+	}
+	if _, exists := b.orders[command.OrderID]; exists {
+		return fmt.Errorf("%s: %w", command.OrderID, ErrDuplicateOrderID)
+	}
+	return nil
+}
+
+func (b *OrderBook) canCancel(command domain.CancelOrder) error {
+	if err := command.Validate(); err != nil {
+		return err
+	}
+	order, exists := b.orders[command.OrderID]
+	if !exists {
+		return fmt.Errorf("%s: %w", command.OrderID, ErrOrderNotFound)
+	}
+	if order.Status() != domain.OrderStatusOpen && order.Status() != domain.OrderStatusPartiallyFilled {
+		return fmt.Errorf("%s: %w", command.OrderID, domain.ErrOrderNotOpen)
+	}
+	return nil
+}
+
 // PlaceOrder assigns the order sequence, matches at maker prices, and rests any
 // remaining quantity. A single monotonically increasing sequence is shared by
 // accepted orders and generated trades.
 func (b *OrderBook) PlaceOrder(command domain.PlaceOrder) (*domain.Order, []domain.Trade, error) {
-	if err := command.Validate(); err != nil {
+	if err := b.canPlace(command); err != nil {
 		return nil, nil, err
-	}
-	if command.TimeInForce != domain.TimeInForceGTC {
-		return nil, nil, ErrUnsupportedTimeInForce
-	}
-	if _, exists := b.orders[command.OrderID]; exists {
-		return nil, nil, fmt.Errorf("%s: %w", command.OrderID, ErrDuplicateOrderID)
 	}
 
 	orderSequence := b.allocateSequence()
@@ -106,13 +128,10 @@ func (b *OrderBook) PlaceOrder(command domain.PlaceOrder) (*domain.Order, []doma
 // other entries at its price. Filled and already canceled orders are rejected
 // by the domain transition with domain.ErrOrderNotOpen.
 func (b *OrderBook) CancelOrder(command domain.CancelOrder) (OrderSnapshot, error) {
-	if err := command.Validate(); err != nil {
+	if err := b.canCancel(command); err != nil {
 		return OrderSnapshot{}, err
 	}
-	order, exists := b.orders[command.OrderID]
-	if !exists {
-		return OrderSnapshot{}, fmt.Errorf("%s: %w", command.OrderID, ErrOrderNotFound)
-	}
+	order := b.orders[command.OrderID]
 	location, active := b.active[command.OrderID]
 	if !active {
 		if err := order.Cancel(); err != nil {
@@ -139,6 +158,59 @@ func (b *OrderBook) CancelOrder(command domain.CancelOrder) (OrderSnapshot, erro
 	// sequence just like accepted orders and trades.
 	b.allocateSequence()
 	return snapshotOrder(order), nil
+}
+
+type persistedBook struct {
+	Sequence domain.Sequence `json:"sequence"`
+	Orders   []OrderSnapshot `json:"orders"`
+}
+
+func (b *OrderBook) marshalState() ([]byte, error) {
+	state := persistedBook{Sequence: b.nextSequence, Orders: make([]OrderSnapshot, 0, len(b.orders))}
+	for _, order := range b.orders {
+		state.Orders = append(state.Orders, snapshotOrder(order))
+	}
+	sort.Slice(state.Orders, func(i, j int) bool { return state.Orders[i].Sequence < state.Orders[j].Sequence })
+	return json.Marshal(state)
+}
+
+func restoreOrderBook(data []byte) (*OrderBook, error) {
+	var state persistedBook
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("decode order book snapshot: %w", err)
+	}
+	book := NewOrderBook()
+	book.nextSequence = state.Sequence
+	for _, saved := range state.Orders {
+		if saved.Sequence > state.Sequence {
+			return nil, fmt.Errorf("order %s sequence exceeds snapshot: %w", saved.ID, ErrDuplicateOrderID)
+		}
+		if _, exists := book.orders[saved.ID]; exists {
+			return nil, fmt.Errorf("%s: %w", saved.ID, ErrDuplicateOrderID)
+		}
+		order, err := domain.NewOrder(saved.ID, saved.Sequence, saved.Side, saved.Type, saved.TimeInForce, saved.Price, saved.OriginalQuantity)
+		if err != nil {
+			return nil, err
+		}
+		if saved.ExecutedQuantity > 0 {
+			if err := order.Fill(saved.ExecutedQuantity); err != nil {
+				return nil, err
+			}
+		}
+		if saved.Status == domain.OrderStatusCanceled {
+			if err := order.Cancel(); err != nil {
+				return nil, err
+			}
+		}
+		if snapshotOrder(order) != saved {
+			return nil, fmt.Errorf("order %s state is inconsistent", saved.ID)
+		}
+		book.orders[saved.ID] = order
+		if order.Status() == domain.OrderStatusOpen || order.Status() == domain.OrderStatusPartiallyFilled {
+			book.rest(order)
+		}
+	}
+	return book, nil
 }
 
 // GetOrder returns a copy of any accepted order, including terminal orders.

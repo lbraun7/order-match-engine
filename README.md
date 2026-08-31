@@ -13,7 +13,8 @@ matching, cancellation, queries, the single-writer engine, and a versioned
 gRPC API with market-data streaming. It provides a bounded command queue with
 explicit overload errors, context-aware operations, and graceful shutdown.
 Order queries and consistent book snapshots return immutable value copies.
-Persistence will be introduced incrementally according to the local roadmap.
+Accepted mutations are persisted to a checksummed append-only event log and
+recovered from periodic snapshots plus replay of subsequent commands.
 
 The initial architecture separates the executable from the core packages:
 
@@ -73,10 +74,15 @@ Start the service on its default gRPC address (`:50051`):
 go run ./cmd/order-match-engine
 ```
 
+By default durable files are stored in `./data`. Use `-data-dir` to select a
+different location and `-snapshot-interval` to tune snapshot frequency. An
+order is accepted only after its command is flushed to the event log; startup
+fails explicitly if a record is truncated or corrupt.
+
 `PlaceOrder` requires a `client_order_id`. Repeating the same ID and payload
 returns the original response without touching the engine; reusing it with a
 different payload returns `ALREADY_EXISTS`. This registry is process-local and
-will become durable with the event-log phase.
+is intentionally separate from the durable engine command log.
 
 Every market-data subscription receives a book snapshot first. Each delta has
 `previous_sequence` and `sequence` high-water marks and can include an accepted
