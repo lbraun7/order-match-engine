@@ -14,7 +14,10 @@ gRPC API with market-data streaming. It provides a bounded command queue with
 explicit overload errors, context-aware operations, and graceful shutdown.
 Order queries and consistent book snapshots return immutable value copies.
 Accepted mutations are persisted to a checksummed append-only event log and
-recovered from periodic snapshots plus replay of subsequent commands.
+recovered from periodic snapshots plus replay of subsequent commands. An
+optional asynchronous projector persists trades, current order state, and
+queryable order history in Postgres without putting the database on the
+matcher's critical path.
 
 The initial architecture separates the executable from the core packages:
 
@@ -24,6 +27,8 @@ api/v1/                  protobuf contract and generated Go API
 internal/domain/         domain types and invariants
 internal/engine/         order matching and command processing
 internal/grpcserver/     transport, idempotency, and market data
+internal/projection/     asynchronous Postgres query-model writer
+migrations/              versioned Postgres schema
 ```
 
 The core uses integers for prices and quantities, assigns ordering sequences
@@ -73,6 +78,33 @@ Start the service on its default gRPC address (`:50051`):
 ```sh
 go run ./cmd/order-match-engine
 ```
+
+Start the local Postgres and enable asynchronous projections:
+
+```sh
+docker compose up -d postgres
+go run ./cmd/order-match-engine \
+  -database-url 'postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable'
+```
+
+The Compose service applies `migrations/000001_projections.up.sql` when its
+volume is created. The projection transaction writes an idempotency marker,
+the affected order versions and trades, and its checkpoint atomically. If
+Postgres is unavailable, retry attempts are bounded and logged; the matcher
+continues accepting durable commands, and later projection polls catch up from
+the event log.
+
+To discard and deterministically rebuild all query tables from the log:
+
+```sh
+go run ./cmd/order-match-engine \
+  -database-url 'postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable' \
+  -rebuild-projections
+```
+
+`orders` contains the latest state, `order_history` contains every order state
+affected by each command, and `trades` contains executions. `projection_events`
+and `projection_checkpoint` make writers idempotent by durable event sequence.
 
 By default durable files are stored in `./data`. Use `-data-dir` to select a
 different location and `-snapshot-interval` to tune snapshot frequency. An

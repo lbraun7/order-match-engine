@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"net"
@@ -14,6 +15,7 @@ import (
 	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
 	"github.com/lucasbraun96/order-match-engine/internal/engine"
 	"github.com/lucasbraun96/order-match-engine/internal/grpcserver"
+	"github.com/lucasbraun96/order-match-engine/internal/projection"
 	"google.golang.org/grpc"
 )
 
@@ -23,6 +25,10 @@ func main() {
 	subscriberBuffer := flag.Int("subscriber-buffer", grpcserver.DefaultSubscriberBuffer, "market-data updates buffered per subscriber")
 	dataDirectory := flag.String("data-dir", "data", "directory for the event log and recovery snapshot")
 	snapshotInterval := flag.Uint64("snapshot-interval", 1000, "accepted commands between recovery snapshots; zero disables snapshots")
+	databaseURL := flag.String("database-url", "", "Postgres URL for asynchronous projections; empty disables projections")
+	rebuildProjections := flag.Bool("rebuild-projections", false, "clear and rebuild Postgres projections from the event log before serving")
+	projectionPoll := flag.Duration("projection-poll-interval", time.Second, "interval between projection catch-up attempts")
+	projectionRetries := flag.Int("projection-retry-limit", 3, "retries per projection database operation")
 	flag.Parse()
 
 	if err := os.MkdirAll(*dataDirectory, 0o700); err != nil {
@@ -36,6 +42,34 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	shutdownSignal, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	var projectionStore *projection.PostgresStore
+	if *databaseURL != "" {
+		projectionStore, err = projection.OpenPostgres(*databaseURL)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer projectionStore.Close()
+		projector, err := projection.New(projectionStore, projection.Config{
+			EventLogPath: filepath.Join(*dataDirectory, "events.log"),
+			PollInterval: *projectionPoll,
+			RetryLimit:   *projectionRetries,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+		if *rebuildProjections {
+			if err := projector.Rebuild(shutdownSignal); err != nil {
+				log.Fatalf("rebuild projections: %v", err)
+			}
+		}
+		go func() {
+			if err := projector.Run(shutdownSignal); err != nil && !errors.Is(err, context.Canceled) {
+				log.Printf("projection worker stopped: %v", err)
+			}
+		}()
+	}
 	service, err := grpcserver.New(matchingEngine, *subscriberBuffer)
 	if err != nil {
 		log.Fatal(err)
@@ -47,8 +81,6 @@ func main() {
 	server := grpc.NewServer()
 	ordermatchv1.RegisterOrderMatchServiceServer(server, service)
 
-	shutdownSignal, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 	go func() {
 		<-shutdownSignal.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

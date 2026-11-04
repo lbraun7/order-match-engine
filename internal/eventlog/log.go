@@ -53,6 +53,18 @@ func Open(path string) (*Log, error) {
 	return &Log{file: file}, nil
 }
 
+// ReadFile opens an event log for reading without sharing the writer's file
+// offset. It is safe to call while another process or goroutine appends fully
+// flushed records to the same path.
+func ReadFile(path string) ([]Event, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return readAll(file)
+}
+
 func (l *Log) Append(event Event) error {
 	if l.failed != nil {
 		return fmt.Errorf("%v: %w", l.failed, ErrLogFailed)
@@ -93,10 +105,19 @@ func (l *Log) ReadAll() ([]Event, error) {
 	if _, err := l.file.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
+	events, err := readAll(l.file)
+	if err != nil {
+		return nil, err
+	}
+	_, err = l.file.Seek(0, io.SeekEnd)
+	return events, err
+}
+
+func readAll(reader io.Reader) ([]Event, error) {
 	var events []Event
 	for {
 		header := make([]byte, headerSize)
-		n, err := io.ReadFull(l.file, header)
+		n, err := io.ReadFull(reader, header)
 		if errors.Is(err, io.EOF) && n == 0 {
 			break
 		}
@@ -115,7 +136,7 @@ func (l *Log) ReadAll() ([]Event, error) {
 			return nil, fmt.Errorf("record %d payload length: %w", len(events), ErrCorruptRecord)
 		}
 		payload := make([]byte, length)
-		if _, err := io.ReadFull(l.file, payload); err != nil {
+		if _, err := io.ReadFull(reader, payload); err != nil {
 			return nil, fmt.Errorf("record %d payload: %w", len(events), ErrTruncatedRecord)
 		}
 		checksum := crc32.NewIEEE()
@@ -126,8 +147,7 @@ func (l *Log) ReadAll() ([]Event, error) {
 		}
 		events = append(events, Event{Version: version, Type: Type(header[6]), Sequence: binary.BigEndian.Uint64(header[8:16]), Payload: payload})
 	}
-	_, err := l.file.Seek(0, io.SeekEnd)
-	return events, err
+	return events, nil
 }
 
 func (l *Log) Close() error { return l.file.Close() }
