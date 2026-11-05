@@ -20,8 +20,9 @@ func TestPostgresStoreAppliesEventAtomicallyAndIdempotently(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	symbolStore := store.ForSymbol("BTC-USD")
 	ctx := context.Background()
-	if err := store.Reset(ctx); err != nil {
+	if err := symbolStore.Reset(ctx); err != nil {
 		t.Fatal(err)
 	}
 	trade, err := domain.NewTrade("2", 2, "maker", "taker", 100, 3)
@@ -38,13 +39,13 @@ func TestPostgresStoreAppliesEventAtomicallyAndIdempotently(t *testing.T) {
 		}},
 		Trades: []domain.Trade{trade},
 	}
-	if err := store.Apply(ctx, event); err != nil {
+	if err := symbolStore.Apply(ctx, event); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Apply(ctx, event); err != nil {
+	if err := symbolStore.Apply(ctx, event); err != nil {
 		t.Fatalf("idempotent apply: %v", err)
 	}
-	checkpoint, err := store.Checkpoint(ctx)
+	checkpoint, err := symbolStore.Checkpoint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

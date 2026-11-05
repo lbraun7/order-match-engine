@@ -10,12 +10,12 @@ import (
 )
 
 func TestEngineMetricsExposeQueueAndBookDepth(t *testing.T) {
-	matchingEngine, err := engine.NewEngine(8)
+	router, err := engine.NewRouter(8)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = matchingEngine.Shutdown(context.Background()) })
-	if _, err := matchingEngine.PlaceOrder(context.Background(), domain.PlaceOrder{
+	t.Cleanup(func() { _ = router.Shutdown(context.Background()) })
+	if _, err := router.PlaceOrder(context.Background(), "BTC-USD", domain.PlaceOrder{
 		OrderID: "bid", Side: domain.SideBuy, OrderType: domain.OrderTypeLimit,
 		TimeInForce: domain.TimeInForceGTC, Price: 100, Quantity: 2,
 	}); err != nil {
@@ -23,7 +23,7 @@ func TestEngineMetricsExposeQueueAndBookDepth(t *testing.T) {
 	}
 
 	registry := prometheus.NewPedanticRegistry()
-	metrics := New(matchingEngine)
+	metrics := New(router)
 	if err := metrics.Register(registry); err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package domain
 // IDs are strings because their allocation strategy belongs to the engine or
 // its caller, not to the domain model.
 type (
+	Symbol  string
 	OrderID string
 	TradeID string
 )
@@ -13,6 +14,15 @@ type (
 	Price    int64
 	Quantity int64
 )
+
+// Validate rejects an empty market symbol. Symbols are otherwise opaque and
+// case-sensitive so normalization remains an application concern.
+func (s Symbol) Validate() error {
+	if s == "" {
+		return ErrInvalidSymbol
+	}
+	return nil
+}
 
 func (id OrderID) Validate() error {
 	if id == "" {

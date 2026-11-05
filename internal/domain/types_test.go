@@ -11,6 +11,8 @@ func TestPrimitiveValidation(t *testing.T) {
 		err  error
 		want error
 	}{
+		{"empty symbol", Symbol("").Validate(), ErrInvalidSymbol},
+		{"valid symbol", Symbol("BTC-USD").Validate(), nil},
 		{"empty order ID", OrderID("").Validate(), ErrInvalidOrderID},
 		{"valid order ID", OrderID("order-1").Validate(), nil},
 		{"empty trade ID", TradeID("").Validate(), ErrInvalidTradeID},

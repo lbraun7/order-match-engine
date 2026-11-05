@@ -17,7 +17,9 @@ Accepted mutations are persisted to a checksummed append-only event log and
 recovered from periodic snapshots plus replay of subsequent commands. An
 optional asynchronous projector persists trades, current order state, and
 queryable order history in Postgres without putting the database on the
-matcher's critical path.
+matcher's critical path. A lazy multi-symbol router owns one single-writer
+engine, bounded queue, sequence space, event log, snapshot, and market-data
+broker per symbol.
 
 The initial architecture separates the executable from the core packages:
 
@@ -62,6 +64,9 @@ observability remain outside the core.
 - The engine serializes placement, cancellation, and queries through a bounded
   FIFO queue. A full queue returns `ErrQueueFull`; shutdown rejects new work and
   drains commands that were already accepted.
+- The router creates exactly one engine per symbol on first use. Symbols have
+  independent sequence numbers, order/trade ID namespaces, queues, persistence,
+  idempotency registries, streams, and projection checkpoints.
 - Canceling a caller context stops waiting but does not roll back a command
   already accepted by the engine.
 - Cancellation removes an active order through its indexed list element, keeps
@@ -108,15 +113,26 @@ go run ./cmd/order-match-engine \
 affected by each command, and `trades` contains executions. `projection_events`
 and `projection_checkpoint` make writers idempotent by durable event sequence.
 
-By default durable files are stored in `./data`. Use `-data-dir` to select a
-different location and `-snapshot-interval` to tune snapshot frequency. An
-order is accepted only after its command is flushed to the event log; startup
-fails explicitly if a record is truncated or corrupt.
+By default durable files are stored below `./data`, in a URL-safe base64
+directory per symbol. Use `-data-dir` to select a different root and
+`-snapshot-interval` to tune snapshot frequency. An order is accepted only
+after its command is flushed to its symbol's event log; startup fails
+explicitly if a record is truncated or corrupt.
 
-`PlaceOrder` requires a `client_order_id`. Repeating the same ID and payload
-returns the original response without touching the engine; reusing it with a
-different payload returns `ALREADY_EXISTS`. This registry is process-local and
-is intentionally separate from the durable engine command log.
+The multi-symbol layout intentionally refuses to start when it finds a legacy
+top-level `data/events.log`, because the service cannot infer that book's
+symbol safely. Move the legacy log and snapshot into the URL-safe base64
+directory for the intended symbol before upgrading. Existing Postgres volumes
+created with the single-symbol schema must likewise be migrated or recreated;
+the checked-in initial migration describes the new composite `(symbol, id)`
+keys used by fresh environments.
+
+Every RPC requires `symbol`, and `PlaceOrder` also requires a
+`client_order_id`. Repeating the same client ID and payload within the same
+symbol returns the original response without touching the engine; reusing it
+with a different payload returns `ALREADY_EXISTS`. The registry is
+process-local, scoped by symbol, and intentionally separate from the durable
+engine command log.
 
 Every market-data subscription receives a book snapshot first. Each delta has
 `previous_sequence` and `sequence` high-water marks and can include an accepted
@@ -148,10 +164,15 @@ Run an end-to-end measurement against the public gRPC API:
 go run ./cmd/loadtest -requests 10000 -concurrency 16 -run-id "$(date +%s)"
 ```
 
+Distribute the same load over multiple books with
+`-symbols BTC-USD,ETH-USD,SOL-USD`. The report records the selected symbols.
+
 The load report includes throughput, p50/p95/p99, failures, parameters, and
 host metadata. Matcher benchmarks, profile capture, reference results,
 methodology, known limits, and the documented optimization are in
-[`docs/performance.md`](docs/performance.md).
+[`docs/performance.md`](docs/performance.md). The multi-symbol ownership and
+lifecycle decision is recorded in
+[`docs/adr/0005-multi-symbol-router.md`](docs/adr/0005-multi-symbol-router.md).
 
 Regenerate the checked-in protobuf bindings with:
 

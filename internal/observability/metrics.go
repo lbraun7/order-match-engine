@@ -25,7 +25,7 @@ type Metrics struct {
 
 // New creates metrics for request throughput/latency and aggregate engine
 // state. Engine state is sampled when Prometheus scrapes the registry.
-func New(matchingEngine *engine.Engine) *Metrics {
+func New(router *engine.Router) *Metrics {
 	return &Metrics{
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -38,7 +38,7 @@ func New(matchingEngine *engine.Engine) *Metrics {
 			Help:      "Unary gRPC request latency by method.",
 			Buckets:   []float64{0.0001, 0.00025, 0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
 		}, []string{"method"}),
-		engine: newEngineCollector(matchingEngine),
+		engine: newEngineCollector(router),
 	}
 }
 
@@ -65,7 +65,7 @@ func (m *Metrics) UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 }
 
 type engineCollector struct {
-	engine         *engine.Engine
+	router         *engine.Router
 	queueDepth     *prometheus.Desc
 	queueCapacity  *prometheus.Desc
 	bookLevels     *prometheus.Desc
@@ -75,14 +75,14 @@ type engineCollector struct {
 	failures       atomic.Uint64
 }
 
-func newEngineCollector(matchingEngine *engine.Engine) *engineCollector {
+func newEngineCollector(router *engine.Router) *engineCollector {
 	return &engineCollector{
-		engine:         matchingEngine,
-		queueDepth:     prometheus.NewDesc(namespace+"_engine_queue_depth", "Commands waiting in the single-writer queue.", nil, nil),
-		queueCapacity:  prometheus.NewDesc(namespace+"_engine_queue_capacity", "Configured command queue capacity.", nil, nil),
-		bookLevels:     prometheus.NewDesc(namespace+"_book_price_levels", "Visible price levels by side.", []string{"side"}, nil),
-		restingOrders:  prometheus.NewDesc(namespace+"_book_resting_orders", "Orders currently resting in the book.", nil, nil),
-		sequence:       prometheus.NewDesc(namespace+"_engine_sequence", "Latest engine sequence.", nil, nil),
+		router:         router,
+		queueDepth:     prometheus.NewDesc(namespace+"_engine_queue_depth", "Commands waiting in the single-writer queue.", []string{"symbol"}, nil),
+		queueCapacity:  prometheus.NewDesc(namespace+"_engine_queue_capacity", "Configured command queue capacity.", []string{"symbol"}, nil),
+		bookLevels:     prometheus.NewDesc(namespace+"_book_price_levels", "Visible price levels by side.", []string{"symbol", "side"}, nil),
+		restingOrders:  prometheus.NewDesc(namespace+"_book_resting_orders", "Orders currently resting in the book.", []string{"symbol"}, nil),
+		sequence:       prometheus.NewDesc(namespace+"_engine_sequence", "Latest engine sequence.", []string{"symbol"}, nil),
 		scrapeFailures: prometheus.NewDesc(namespace+"_engine_stats_scrape_failures_total", "Engine samples that could not be collected.", nil, nil),
 	}
 }
@@ -97,20 +97,23 @@ func (c *engineCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 func (c *engineCollector) Collect(ch chan<- prometheus.Metric) {
-	queueDepth, queueCapacity := c.engine.QueueStats()
-	ch <- prometheus.MustNewConstMetric(c.queueDepth, prometheus.GaugeValue, float64(queueDepth))
-	ch <- prometheus.MustNewConstMetric(c.queueCapacity, prometheus.GaugeValue, float64(queueCapacity))
+	for symbol, matchingEngine := range c.router.Engines() {
+		label := string(symbol)
+		queueDepth, queueCapacity := matchingEngine.QueueStats()
+		ch <- prometheus.MustNewConstMetric(c.queueDepth, prometheus.GaugeValue, float64(queueDepth), label)
+		ch <- prometheus.MustNewConstMetric(c.queueCapacity, prometheus.GaugeValue, float64(queueCapacity), label)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	stats, err := c.engine.Stats(ctx)
-	if err != nil {
-		ch <- prometheus.MustNewConstMetric(c.scrapeFailures, prometheus.CounterValue, float64(c.failures.Add(1)))
-		return
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		stats, err := matchingEngine.Stats(ctx)
+		cancel()
+		if err != nil {
+			c.failures.Add(1)
+			continue
+		}
+		ch <- prometheus.MustNewConstMetric(c.bookLevels, prometheus.GaugeValue, float64(stats.BidLevels), label, "buy")
+		ch <- prometheus.MustNewConstMetric(c.bookLevels, prometheus.GaugeValue, float64(stats.AskLevels), label, "sell")
+		ch <- prometheus.MustNewConstMetric(c.restingOrders, prometheus.GaugeValue, float64(stats.RestingOrders), label)
+		ch <- prometheus.MustNewConstMetric(c.sequence, prometheus.GaugeValue, float64(stats.Sequence), label)
 	}
-	ch <- prometheus.MustNewConstMetric(c.bookLevels, prometheus.GaugeValue, float64(stats.BidLevels), "buy")
-	ch <- prometheus.MustNewConstMetric(c.bookLevels, prometheus.GaugeValue, float64(stats.AskLevels), "sell")
-	ch <- prometheus.MustNewConstMetric(c.restingOrders, prometheus.GaugeValue, float64(stats.RestingOrders))
-	ch <- prometheus.MustNewConstMetric(c.sequence, prometheus.GaugeValue, float64(stats.Sequence))
 	ch <- prometheus.MustNewConstMetric(c.scrapeFailures, prometheus.CounterValue, float64(c.failures.Load()))
 }

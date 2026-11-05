@@ -76,6 +76,7 @@ message BookSnapshot {
   uint64 sequence = 1;
   repeated PriceLevel bids = 2;
   repeated PriceLevel asks = 3;
+  string symbol = 4;
 }
 
 message BookDelta {
@@ -92,6 +93,8 @@ message PlaceOrderRequest {
   TimeInForce time_in_force = 5;
   int64 price = 6;
   int64 quantity = 7;
+  // Required. Symbols are opaque and case-sensitive.
+  string symbol = 8;
 }
 
 message PlaceOrderResponse {
@@ -100,18 +103,19 @@ message PlaceOrderResponse {
   repeated Trade trades = 3;
 }
 
-message CancelOrderRequest { string order_id = 1; }
+message CancelOrderRequest { string order_id = 1; string symbol = 2; }
 message CancelOrderResponse { uint64 sequence = 1; Order order = 2; }
-message GetOrderRequest { string order_id = 1; }
+message GetOrderRequest { string order_id = 1; string symbol = 2; }
 message GetOrderResponse { uint64 sequence = 1; Order order = 2; }
-message GetBookSnapshotRequest {}
+message GetBookSnapshotRequest { string symbol = 1; }
 message GetBookSnapshotResponse { uint64 sequence = 1; BookSnapshot snapshot = 2; }
-message StreamMarketDataRequest {}
+message StreamMarketDataRequest { string symbol = 1; }
 
 message MarketDataUpdate {
   uint64 sequence = 1;
   // A mismatch with the consumer's high-water mark is a gap.
   uint64 previous_sequence = 4;
+  string symbol = 5;
   oneof payload {
     BookSnapshot snapshot = 2;
     BookDelta delta = 3;

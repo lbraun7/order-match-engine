@@ -4,6 +4,7 @@ import "errors"
 
 // Stable domain errors can be inspected with errors.Is by callers.
 var (
+	ErrInvalidSymbol      = errors.New("invalid symbol")
 	ErrInvalidOrderID     = errors.New("invalid order ID")
 	ErrInvalidTradeID     = errors.New("invalid trade ID")
 	ErrInvalidSequence    = errors.New("invalid sequence")

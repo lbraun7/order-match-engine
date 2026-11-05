@@ -537,6 +537,7 @@ type BookSnapshot struct {
 	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	Bids          []*PriceLevel          `protobuf:"bytes,2,rep,name=bids,proto3" json:"bids,omitempty"`
 	Asks          []*PriceLevel          `protobuf:"bytes,3,rep,name=asks,proto3" json:"asks,omitempty"`
+	Symbol        string                 `protobuf:"bytes,4,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -590,6 +591,13 @@ func (x *BookSnapshot) GetAsks() []*PriceLevel {
 		return x.Asks
 	}
 	return nil
+}
+
+func (x *BookSnapshot) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
 }
 
 type BookDelta struct {
@@ -661,6 +669,8 @@ type PlaceOrderRequest struct {
 	TimeInForce   TimeInForce            `protobuf:"varint,5,opt,name=time_in_force,json=timeInForce,proto3,enum=ordermatch.v1.TimeInForce" json:"time_in_force,omitempty"`
 	Price         int64                  `protobuf:"varint,6,opt,name=price,proto3" json:"price,omitempty"`
 	Quantity      int64                  `protobuf:"varint,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	// Required. Symbols are opaque and case-sensitive.
+	Symbol        string `protobuf:"bytes,8,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -744,6 +754,13 @@ func (x *PlaceOrderRequest) GetQuantity() int64 {
 	return 0
 }
 
+func (x *PlaceOrderRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
 type PlaceOrderResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
@@ -807,6 +824,7 @@ func (x *PlaceOrderResponse) GetTrades() []*Trade {
 type CancelOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Symbol        string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -844,6 +862,13 @@ func (*CancelOrderRequest) Descriptor() ([]byte, []int) {
 func (x *CancelOrderRequest) GetOrderId() string {
 	if x != nil {
 		return x.OrderId
+	}
+	return ""
+}
+
+func (x *CancelOrderRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
 	}
 	return ""
 }
@@ -903,6 +928,7 @@ func (x *CancelOrderResponse) GetOrder() *Order {
 type GetOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Symbol        string                 `protobuf:"bytes,2,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -940,6 +966,13 @@ func (*GetOrderRequest) Descriptor() ([]byte, []int) {
 func (x *GetOrderRequest) GetOrderId() string {
 	if x != nil {
 		return x.OrderId
+	}
+	return ""
+}
+
+func (x *GetOrderRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
 	}
 	return ""
 }
@@ -998,6 +1031,7 @@ func (x *GetOrderResponse) GetOrder() *Order {
 
 type GetBookSnapshotRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1030,6 +1064,13 @@ func (x *GetBookSnapshotRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetBookSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*GetBookSnapshotRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_order_match_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetBookSnapshotRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
 }
 
 type GetBookSnapshotResponse struct {
@@ -1086,6 +1127,7 @@ func (x *GetBookSnapshotResponse) GetSnapshot() *BookSnapshot {
 
 type StreamMarketDataRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1120,11 +1162,19 @@ func (*StreamMarketDataRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_order_match_proto_rawDescGZIP(), []int{13}
 }
 
+func (x *StreamMarketDataRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
 type MarketDataUpdate struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Sequence uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
 	// A mismatch with the consumer's high-water mark is a gap.
 	PreviousSequence uint64 `protobuf:"varint,4,opt,name=previous_sequence,json=previousSequence,proto3" json:"previous_sequence,omitempty"`
+	Symbol           string `protobuf:"bytes,5,opt,name=symbol,proto3" json:"symbol,omitempty"`
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*MarketDataUpdate_Snapshot
@@ -1176,6 +1226,13 @@ func (x *MarketDataUpdate) GetPreviousSequence() uint64 {
 		return x.PreviousSequence
 	}
 	return 0
+}
+
+func (x *MarketDataUpdate) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
 }
 
 func (x *MarketDataUpdate) GetPayload() isMarketDataUpdate_Payload {
@@ -1248,15 +1305,16 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"PriceLevel\x12\x14\n" +
 	"\x05price\x18\x01 \x01(\x03R\x05price\x12%\n" +
 	"\x0etotal_quantity\x18\x02 \x01(\x03R\rtotalQuantity\x12,\n" +
-	"\x06orders\x18\x03 \x03(\v2\x14.ordermatch.v1.OrderR\x06orders\"\x88\x01\n" +
+	"\x06orders\x18\x03 \x03(\v2\x14.ordermatch.v1.OrderR\x06orders\"\xa0\x01\n" +
 	"\fBookSnapshot\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12-\n" +
 	"\x04bids\x18\x02 \x03(\v2\x19.ordermatch.v1.PriceLevelR\x04bids\x12-\n" +
-	"\x04asks\x18\x03 \x03(\v2\x19.ordermatch.v1.PriceLevelR\x04asks\"\x9e\x01\n" +
+	"\x04asks\x18\x03 \x03(\v2\x19.ordermatch.v1.PriceLevelR\x04asks\x12\x16\n" +
+	"\x06symbol\x18\x04 \x01(\tR\x06symbol\"\x9e\x01\n" +
 	"\tBookDelta\x127\n" +
 	"\bmutation\x18\x01 \x01(\x0e2\x1b.ordermatch.v1.BookMutationR\bmutation\x12*\n" +
 	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\x12,\n" +
-	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"\xaa\x02\n" +
+	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"\xc2\x02\n" +
 	"\x11PlaceOrderRequest\x12&\n" +
 	"\x0fclient_order_id\x18\x01 \x01(\tR\rclientOrderId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12'\n" +
@@ -1265,29 +1323,35 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"order_type\x18\x04 \x01(\x0e2\x18.ordermatch.v1.OrderTypeR\torderType\x12>\n" +
 	"\rtime_in_force\x18\x05 \x01(\x0e2\x1a.ordermatch.v1.TimeInForceR\vtimeInForce\x12\x14\n" +
 	"\x05price\x18\x06 \x01(\x03R\x05price\x12\x1a\n" +
-	"\bquantity\x18\a \x01(\x03R\bquantity\"\x8a\x01\n" +
+	"\bquantity\x18\a \x01(\x03R\bquantity\x12\x16\n" +
+	"\x06symbol\x18\b \x01(\tR\x06symbol\"\x8a\x01\n" +
 	"\x12PlaceOrderResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12*\n" +
 	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\x12,\n" +
-	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"/\n" +
+	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"G\n" +
 	"\x12CancelOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"]\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
+	"\x06symbol\x18\x02 \x01(\tR\x06symbol\"]\n" +
 	"\x13CancelOrderResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12*\n" +
-	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\",\n" +
+	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\"D\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"Z\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
+	"\x06symbol\x18\x02 \x01(\tR\x06symbol\"Z\n" +
 	"\x10GetOrderResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12*\n" +
-	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\"\x18\n" +
-	"\x16GetBookSnapshotRequest\"n\n" +
+	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\"0\n" +
+	"\x16GetBookSnapshotRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"n\n" +
 	"\x17GetBookSnapshotResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x127\n" +
-	"\bsnapshot\x18\x02 \x01(\v2\x1b.ordermatch.v1.BookSnapshotR\bsnapshot\"\x19\n" +
-	"\x17StreamMarketDataRequest\"\xd3\x01\n" +
+	"\bsnapshot\x18\x02 \x01(\v2\x1b.ordermatch.v1.BookSnapshotR\bsnapshot\"1\n" +
+	"\x17StreamMarketDataRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\"\xeb\x01\n" +
 	"\x10MarketDataUpdate\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12+\n" +
-	"\x11previous_sequence\x18\x04 \x01(\x04R\x10previousSequence\x129\n" +
+	"\x11previous_sequence\x18\x04 \x01(\x04R\x10previousSequence\x12\x16\n" +
+	"\x06symbol\x18\x05 \x01(\tR\x06symbol\x129\n" +
 	"\bsnapshot\x18\x02 \x01(\v2\x1b.ordermatch.v1.BookSnapshotH\x00R\bsnapshot\x120\n" +
 	"\x05delta\x18\x03 \x01(\v2\x18.ordermatch.v1.BookDeltaH\x00R\x05deltaB\t\n" +
 	"\apayload*9\n" +

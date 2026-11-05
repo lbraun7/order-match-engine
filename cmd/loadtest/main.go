@@ -28,6 +28,7 @@ type report struct {
 	RunID           string            `json:"run_id"`
 	Requests        int               `json:"requests"`
 	Concurrency     int               `json:"concurrency"`
+	Symbols         []string          `json:"symbols"`
 	RequestTimeout  string            `json:"request_timeout"`
 	Successful      uint64            `json:"successful"`
 	Failed          uint64            `json:"failed"`
@@ -59,9 +60,11 @@ func main() {
 	concurrency := flag.Int("concurrency", 16, "concurrent clients")
 	requestTimeout := flag.Duration("request-timeout", 5*time.Second, "timeout for each call")
 	runID := flag.String("run-id", fmt.Sprintf("run-%d", time.Now().UnixNano()), "unique order ID prefix for this run")
+	symbolList := flag.String("symbols", "BTC-USD", "comma-separated symbols distributed across requests")
 	flag.Parse()
-	if *requests <= 0 || *concurrency <= 0 || *requestTimeout <= 0 {
-		fmt.Fprintln(os.Stderr, "requests, concurrency, and request-timeout must be positive")
+	symbols := splitSymbols(*symbolList)
+	if *requests <= 0 || *concurrency <= 0 || *requestTimeout <= 0 || len(symbols) == 0 {
+		fmt.Fprintln(os.Stderr, "requests, concurrency, request-timeout, and symbols must be valid")
 		os.Exit(2)
 	}
 
@@ -94,7 +97,7 @@ func main() {
 				}
 				callStarted := time.Now()
 				ctx, cancel := context.WithTimeout(context.Background(), *requestTimeout)
-				_, callErr := client.PlaceOrder(ctx, request(*runID, index))
+				_, callErr := client.PlaceOrder(ctx, request(*runID, symbols[index%len(symbols)], index))
 				cancel()
 				latencies <- time.Since(callStarted)
 				if callErr == nil {
@@ -123,7 +126,7 @@ func main() {
 
 	result := report{
 		Timestamp: time.Now().UTC(), Target: *target, RunID: *runID, Requests: *requests,
-		Concurrency: *concurrency, RequestTimeout: requestTimeout.String(),
+		Concurrency: *concurrency, Symbols: symbols, RequestTimeout: requestTimeout.String(),
 		Successful: successful.Load(), Failed: failed.Load(), Elapsed: elapsed.String(),
 		Throughput: float64(successful.Load()) / elapsed.Seconds(),
 		Latency: latencyReport{
@@ -147,18 +150,28 @@ func main() {
 	}
 }
 
-func request(runID string, index int) *ordermatchv1.PlaceOrderRequest {
+func request(runID, symbol string, index int) *ordermatchv1.PlaceOrderRequest {
 	side := ordermatchv1.Side_SIDE_SELL
 	if index%2 == 1 {
 		side = ordermatchv1.Side_SIDE_BUY
 	}
 	id := fmt.Sprintf("%s-%d", runID, index)
 	return &ordermatchv1.PlaceOrderRequest{
-		ClientOrderId: id, OrderId: id, Side: side,
+		ClientOrderId: id, OrderId: id, Symbol: symbol, Side: side,
 		OrderType:   ordermatchv1.OrderType_ORDER_TYPE_LIMIT,
 		TimeInForce: ordermatchv1.TimeInForce_TIME_IN_FORCE_GTC,
 		Price:       10000, Quantity: 1,
 	}
+}
+
+func splitSymbols(value string) []string {
+	var symbols []string
+	for _, symbol := range strings.Split(value, ",") {
+		if symbol = strings.TrimSpace(symbol); symbol != "" {
+			symbols = append(symbols, symbol)
+		}
+	}
+	return symbols
 }
 
 func percentile(sorted []time.Duration, value int) time.Duration {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
+	"github.com/lucasbraun96/order-match-engine/internal/domain"
 	"github.com/lucasbraun96/order-match-engine/internal/engine"
 	"github.com/lucasbraun96/order-match-engine/internal/grpcserver"
 	"github.com/lucasbraun96/order-match-engine/internal/observability"
@@ -40,43 +43,66 @@ func main() {
 	if err := os.MkdirAll(*dataDirectory, 0o700); err != nil {
 		log.Fatal(err)
 	}
-	matchingEngine, err := engine.NewPersistentEngine(*queueCapacity, engine.PersistenceConfig{
-		LogPath:          filepath.Join(*dataDirectory, "events.log"),
-		SnapshotPath:     filepath.Join(*dataDirectory, "snapshot.json"),
-		SnapshotInterval: *snapshotInterval,
-	})
-	if err != nil {
+	if _, err := os.Stat(filepath.Join(*dataDirectory, "events.log")); err == nil {
+		log.Fatal("legacy single-symbol event log found; move it and snapshot.json into the URL-safe base64 directory for its symbol before starting the multi-symbol service")
+	} else if !errors.Is(err, os.ErrNotExist) {
 		log.Fatal(err)
 	}
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	var projectionStore *projection.PostgresStore
+	var err error
 	if *databaseURL != "" {
 		projectionStore, err = projection.OpenPostgres(*databaseURL)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer projectionStore.Close()
-		projector, err := projection.New(projectionStore, projection.Config{
-			EventLogPath: filepath.Join(*dataDirectory, "events.log"),
-			PollInterval: *projectionPoll,
-			RetryLimit:   *projectionRetries,
+	}
+	router, err := engine.NewRouterWithFactory(func(symbol domain.Symbol) (*engine.Engine, error) {
+		directory := filepath.Join(*dataDirectory, base64.RawURLEncoding.EncodeToString([]byte(symbol)))
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			return nil, err
+		}
+		logPath := filepath.Join(directory, "events.log")
+		matchingEngine, err := engine.NewPersistentEngine(*queueCapacity, engine.PersistenceConfig{
+			LogPath: logPath, SnapshotPath: filepath.Join(directory, "snapshot.json"),
+			SnapshotInterval: *snapshotInterval,
 		})
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
-		if *rebuildProjections {
-			if err := projector.Rebuild(shutdownSignal); err != nil {
-				log.Fatalf("rebuild projections: %v", err)
+		if projectionStore != nil {
+			projector, err := projection.New(projectionStore.ForSymbol(string(symbol)), projection.Config{
+				EventLogPath: logPath, PollInterval: *projectionPoll, RetryLimit: *projectionRetries,
+			})
+			if err != nil {
+				_ = matchingEngine.Shutdown(context.Background())
+				return nil, err
 			}
+			if *rebuildProjections {
+				if err := projector.Rebuild(shutdownSignal); err != nil {
+					_ = matchingEngine.Shutdown(context.Background())
+					return nil, fmt.Errorf("rebuild %s projections: %w", symbol, err)
+				}
+			}
+			go func() {
+				if err := projector.Run(shutdownSignal); err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("projection worker for %s stopped: %v", symbol, err)
+				}
+			}()
 		}
-		go func() {
-			if err := projector.Run(shutdownSignal); err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("projection worker stopped: %v", err)
-			}
-		}()
+		return matchingEngine, nil
+	})
+	if err != nil {
+		log.Fatal(err)
 	}
-	service, err := grpcserver.New(matchingEngine, *subscriberBuffer)
+	for _, symbol := range persistedSymbols(*dataDirectory) {
+		if _, err := router.Snapshot(context.Background(), symbol); err != nil {
+			log.Fatalf("restore symbol %s: %v", symbol, err)
+		}
+	}
+	service, err := grpcserver.New(router, *subscriberBuffer)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,7 +110,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	metrics := observability.New(matchingEngine)
+	metrics := observability.New(router)
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	if err := metrics.Register(registry); err != nil {
@@ -111,7 +137,7 @@ func main() {
 		<-shutdownSignal.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := matchingEngine.Shutdown(ctx); err != nil {
+		if err := router.Shutdown(ctx); err != nil {
 			log.Printf("engine shutdown: %v", err)
 		}
 		if observabilityServer != nil {
@@ -128,4 +154,26 @@ func main() {
 	if err := server.Serve(listener); err != nil {
 		log.Printf("gRPC server stopped: %v", err)
 	}
+}
+
+func persistedSymbols(dataDirectory string) []domain.Symbol {
+	entries, err := os.ReadDir(dataDirectory)
+	if err != nil {
+		return nil
+	}
+	var symbols []domain.Symbol
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dataDirectory, entry.Name(), "events.log")); err != nil {
+			continue
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(entry.Name())
+		if err != nil || len(decoded) == 0 {
+			continue
+		}
+		symbols = append(symbols, domain.Symbol(decoded))
+	}
+	return symbols
 }

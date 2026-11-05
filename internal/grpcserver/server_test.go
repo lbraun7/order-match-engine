@@ -37,7 +37,7 @@ func TestPlaceOrderIsIdempotentAndRejectsConflictingReuse(t *testing.T) {
 	if _, err := client.PlaceOrder(ctx, conflict); status.Code(err) != codes.AlreadyExists {
 		t.Fatalf("code = %s, want AlreadyExists (%v)", status.Code(err), err)
 	}
-	book, err := client.GetBookSnapshot(ctx, &ordermatchv1.GetBookSnapshotRequest{})
+	book, err := client.GetBookSnapshot(ctx, &ordermatchv1.GetBookSnapshotRequest{Symbol: "BTC-USD"})
 	if err != nil || len(book.Snapshot.Bids) != 1 || len(book.Snapshot.Bids[0].Orders) != 1 {
 		t.Fatalf("duplicate changed book: snapshot=%v err=%v", book, err)
 	}
@@ -55,18 +55,18 @@ func TestCRUDAndDomainErrorMapping(t *testing.T) {
 	if err != nil || placed.Order.Status != ordermatchv1.OrderStatus_ORDER_STATUS_OPEN {
 		t.Fatalf("place: response=%v err=%v", placed, err)
 	}
-	got, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{OrderId: "order"})
+	got, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{OrderId: "order", Symbol: "BTC-USD"})
 	if err != nil || got.Order.OrderId != "order" {
 		t.Fatalf("get: response=%v err=%v", got, err)
 	}
-	canceled, err := client.CancelOrder(ctx, &ordermatchv1.CancelOrderRequest{OrderId: "order"})
+	canceled, err := client.CancelOrder(ctx, &ordermatchv1.CancelOrderRequest{OrderId: "order", Symbol: "BTC-USD"})
 	if err != nil || canceled.Sequence != 2 || canceled.Order.Status != ordermatchv1.OrderStatus_ORDER_STATUS_CANCELED {
 		t.Fatalf("cancel: response=%v err=%v", canceled, err)
 	}
-	if _, err := client.CancelOrder(ctx, &ordermatchv1.CancelOrderRequest{OrderId: "order"}); status.Code(err) != codes.FailedPrecondition {
+	if _, err := client.CancelOrder(ctx, &ordermatchv1.CancelOrderRequest{OrderId: "order", Symbol: "BTC-USD"}); status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("second cancel code = %s", status.Code(err))
 	}
-	if _, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{OrderId: "missing"}); status.Code(err) != codes.NotFound {
+	if _, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{OrderId: "missing", Symbol: "BTC-USD"}); status.Code(err) != codes.NotFound {
 		t.Fatalf("missing code = %s", status.Code(err))
 	}
 }
@@ -76,7 +76,7 @@ func TestMarketDataStartsWithSnapshotThenSendsSequencedDeltas(t *testing.T) {
 	defer cleanup()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := client.StreamMarketData(ctx, &ordermatchv1.StreamMarketDataRequest{})
+	stream, err := client.StreamMarketData(ctx, &ordermatchv1.StreamMarketDataRequest{Symbol: "BTC-USD"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,6 +90,48 @@ func TestMarketDataStartsWithSnapshotThenSendsSequencedDeltas(t *testing.T) {
 	delta, err := stream.Recv()
 	if err != nil || delta.GetDelta() == nil || delta.Sequence != 1 || delta.PreviousSequence != 0 || delta.GetDelta().Order.OrderId != "stream-order" {
 		t.Fatalf("delta=%v err=%v", delta, err)
+	}
+}
+
+func TestSymbolsHaveIndependentBooksSequencesAndIdempotency(t *testing.T) {
+	client, cleanup := testClient(t, 8)
+	defer cleanup()
+	ctx := context.Background()
+
+	btc := limitOrder("same-client", "same-order", ordermatchv1.Side_SIDE_BUY, 100, 2)
+	eth := limitOrder("same-client", "same-order", ordermatchv1.Side_SIDE_SELL, 200, 3)
+	eth.Symbol = "ETH-USD"
+	for _, request := range []*ordermatchv1.PlaceOrderRequest{btc, eth} {
+		response, err := client.PlaceOrder(ctx, request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.Sequence != 1 {
+			t.Fatalf("%s sequence = %d, want 1", request.Symbol, response.Sequence)
+		}
+	}
+	for symbol, wantSide := range map[string]ordermatchv1.Side{"BTC-USD": ordermatchv1.Side_SIDE_BUY, "ETH-USD": ordermatchv1.Side_SIDE_SELL} {
+		snapshot, err := client.GetBookSnapshot(ctx, &ordermatchv1.GetBookSnapshotRequest{Symbol: symbol})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if snapshot.Snapshot.Symbol != symbol {
+			t.Fatalf("snapshot symbol = %q, want %q", snapshot.Snapshot.Symbol, symbol)
+		}
+		order, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{Symbol: symbol, OrderId: "same-order"})
+		if err != nil || order.Order.Side != wantSide {
+			t.Fatalf("%s order=%v err=%v", symbol, order, err)
+		}
+	}
+}
+
+func TestEmptySymbolIsRejected(t *testing.T) {
+	client, cleanup := testClient(t, 8)
+	defer cleanup()
+	request := limitOrder("client", "order", ordermatchv1.Side_SIDE_BUY, 100, 1)
+	request.Symbol = ""
+	if _, err := client.PlaceOrder(context.Background(), request); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("code = %s, want InvalidArgument", status.Code(err))
 	}
 }
 
@@ -108,17 +150,17 @@ func TestBrokerDisconnectsSlowSubscriberWithoutDroppingIndividualUpdates(t *test
 }
 
 func limitOrder(clientID, orderID string, side ordermatchv1.Side, price, quantity int64) *ordermatchv1.PlaceOrderRequest {
-	return &ordermatchv1.PlaceOrderRequest{ClientOrderId: clientID, OrderId: orderID, Side: side, OrderType: ordermatchv1.OrderType_ORDER_TYPE_LIMIT, TimeInForce: ordermatchv1.TimeInForce_TIME_IN_FORCE_GTC, Price: price, Quantity: quantity}
+	return &ordermatchv1.PlaceOrderRequest{ClientOrderId: clientID, OrderId: orderID, Symbol: "BTC-USD", Side: side, OrderType: ordermatchv1.OrderType_ORDER_TYPE_LIMIT, TimeInForce: ordermatchv1.TimeInForce_TIME_IN_FORCE_GTC, Price: price, Quantity: quantity}
 }
 
 func testClient(t *testing.T, subscriberBuffer int) (ordermatchv1.OrderMatchServiceClient, func()) {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
-	matchingEngine, err := engine.NewEngine(64)
+	router, err := engine.NewRouter(64)
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := New(matchingEngine, subscriberBuffer)
+	service, err := New(router, subscriberBuffer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +174,7 @@ func testClient(t *testing.T, subscriberBuffer int) (ordermatchv1.OrderMatchServ
 	cleanup := func() {
 		_ = connection.Close()
 		server.Stop()
-		_ = matchingEngine.Shutdown(context.Background())
+		_ = router.Shutdown(context.Background())
 	}
 	return ordermatchv1.NewOrderMatchServiceClient(connection), cleanup
 }

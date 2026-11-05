@@ -66,6 +66,31 @@ log flush. Filesystem, power policy, other processes, queue size, snapshot
 interval, database projection, and client/server placement materially change
 the result. Compare runs only when those parameters are the same.
 
+## Multi-symbol scalability
+
+The router benchmark submits concurrently through the public router API while
+varying the number of independently owned books. A reference run on 2026-11-05
+used Apple M4, 10 logical CPUs, darwin/arm64, Go 1.27.0, and `-benchtime=1s`:
+
+| Symbols | Time/op | Approx. operations/s | Bytes/op | Allocations/op |
+| ---: | ---: | ---: | ---: | ---: |
+| 1 | 821.4 ns | 1.22 M | 818 B | 12 |
+| 2 | 760.2 ns | 1.32 M | 831 B | 12 |
+| 4 | 677.5 ns | 1.48 M | 797 B | 12 |
+| 8 | 539.4 ns | 1.85 M | 895 B | 12 |
+
+Reproduce it with:
+
+```sh
+go test -run '^$' -bench '^BenchmarkRouterSymbolScalability$' \
+  -benchmem -benchtime=1s ./internal/engine
+```
+
+This run improved throughput as more single writers could execute on separate
+CPUs, but scaling was not linear and allocation noise varies between samples.
+Results include command validation, routing, queueing, matching, and immutable
+result creation, but exclude durable event-log flush and gRPC.
+
 ## Profiling and the measured improvement
 
 Generate CPU, heap, block, and mutex profiles for the 10,000-level insertion
@@ -104,9 +129,9 @@ trusted network or disable it with `-observability-address=''`.
 
 - `order_match_grpc_requests_total` for completed request throughput;
 - `order_match_grpc_request_duration_seconds` for latency histograms;
-- `order_match_engine_queue_depth` and queue capacity;
-- `order_match_book_price_levels` by side and resting-order count;
-- engine sequence and stats-scrape failures;
+- `order_match_engine_queue_depth` and queue capacity by symbol;
+- `order_match_book_price_levels` by symbol and side, plus resting-order count;
+- engine sequence by symbol and stats-scrape failures;
 - standard Go runtime and process metrics.
 
 Book and queue gauges are sampled through a serialized aggregate query. No
