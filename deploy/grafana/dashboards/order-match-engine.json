@@ -1,0 +1,49 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "gRPC throughput",
+      "targets": [{"expr": "sum(rate(order_match_grpc_requests_total[1m])) by (method, code)", "legendFormat": "{{method}} {{code}}"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "gRPC latency percentiles",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum(rate(order_match_grpc_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, sum(rate(order_match_grpc_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum(rate(order_match_grpc_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Engine queue",
+      "targets": [
+        {"expr": "order_match_engine_queue_depth", "legendFormat": "depth"},
+        {"expr": "order_match_engine_queue_capacity", "legendFormat": "capacity"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Book depth",
+      "targets": [
+        {"expr": "order_match_book_price_levels", "legendFormat": "levels {{side}}"},
+        {"expr": "order_match_book_resting_orders", "legendFormat": "resting orders"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["matching", "go"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "title": "Order Matching Engine",
+  "uid": "order-match-engine",
+  "version": 1
+}

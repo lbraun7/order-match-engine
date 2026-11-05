@@ -6,6 +6,8 @@ import (
 	"flag"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -15,12 +17,16 @@ import (
 	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
 	"github.com/lucasbraun96/order-match-engine/internal/engine"
 	"github.com/lucasbraun96/order-match-engine/internal/grpcserver"
+	"github.com/lucasbraun96/order-match-engine/internal/observability"
 	"github.com/lucasbraun96/order-match-engine/internal/projection"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 )
 
 func main() {
 	address := flag.String("address", ":50051", "gRPC listen address")
+	observabilityAddress := flag.String("observability-address", ":9090", "HTTP address for /metrics and /debug/pprof; empty disables it")
 	queueCapacity := flag.Int("queue-capacity", 1024, "engine command queue capacity")
 	subscriberBuffer := flag.Int("subscriber-buffer", grpcserver.DefaultSubscriberBuffer, "market-data updates buffered per subscriber")
 	dataDirectory := flag.String("data-dir", "data", "directory for the event log and recovery snapshot")
@@ -78,8 +84,28 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := grpc.NewServer()
+	metrics := observability.New(matchingEngine)
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	if err := metrics.Register(registry); err != nil {
+		log.Fatal(err)
+	}
+	server := grpc.NewServer(grpc.UnaryInterceptor(metrics.UnaryServerInterceptor()))
 	ordermatchv1.RegisterOrderMatchServiceServer(server, service)
+
+	var observabilityServer *http.Server
+	if *observabilityAddress != "" {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+		mux.Handle("/debug/pprof/", http.DefaultServeMux)
+		observabilityServer = &http.Server{Addr: *observabilityAddress, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		go func() {
+			log.Printf("metrics and pprof listening on %s", *observabilityAddress)
+			if err := observabilityServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("observability server stopped: %v", err)
+			}
+		}()
+	}
 
 	go func() {
 		<-shutdownSignal.Done()
@@ -87,6 +113,11 @@ func main() {
 		defer cancel()
 		if err := matchingEngine.Shutdown(ctx); err != nil {
 			log.Printf("engine shutdown: %v", err)
+		}
+		if observabilityServer != nil {
+			if err := observabilityServer.Shutdown(ctx); err != nil {
+				log.Printf("observability shutdown: %v", err)
+			}
 		}
 		forcedStop := time.AfterFunc(10*time.Second, server.Stop)
 		defer forcedStop.Stop()

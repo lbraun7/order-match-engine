@@ -293,16 +293,23 @@ func (b *OrderBook) rest(order *domain.Order) {
 	if !exists {
 		level = list.New()
 		side.levels[order.Price()] = level
-		side.prices = append(side.prices, order.Price())
-		sort.Slice(side.prices, func(i, j int) bool {
-			if descending {
-				return side.prices[i] > side.prices[j]
-			}
-			return side.prices[i] < side.prices[j]
-		})
+		side.prices = insertPrice(side.prices, order.Price(), descending)
 	}
 	element := level.PushBack(order)
 	b.active[order.ID()] = orderLocation{side: order.Side(), price: order.Price(), element: element}
+}
+
+func insertPrice(prices []domain.Price, price domain.Price, descending bool) []domain.Price {
+	index := sort.Search(len(prices), func(i int) bool {
+		if descending {
+			return prices[i] < price
+		}
+		return prices[i] > price
+	})
+	prices = append(prices, 0)
+	copy(prices[index+1:], prices[index:])
+	prices[index] = price
+	return prices
 }
 
 func (b *OrderBook) allocateSequence() domain.Sequence {

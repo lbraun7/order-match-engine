@@ -28,7 +28,9 @@ internal/domain/         domain types and invariants
 internal/engine/         order matching and command processing
 internal/grpcserver/     transport, idempotency, and market data
 internal/projection/     asynchronous Postgres query-model writer
+internal/observability/  Prometheus collectors and gRPC instrumentation
 migrations/              versioned Postgres schema
+cmd/loadtest/             end-to-end gRPC load generator
 ```
 
 The core uses integers for prices and quantities, assigns ordering sequences
@@ -122,6 +124,35 @@ order plus all trades it generated. A mismatch is a gap, so the client must
 reconnect for a fresh snapshot. A subscriber whose bounded buffer fills is
 disconnected with `RESOURCE_EXHAUSTED` instead of silently losing messages.
 
+## Performance and observability
+
+The service exposes Prometheus metrics and Go pprof profiles on `:9090` by
+default. Metrics cover gRPC throughput and latency, command-queue utilization,
+and aggregate book depth. Disable the listener with
+`-observability-address=''` or bind it to a trusted interface; pprof is not
+authenticated.
+
+Start the ready-to-use Prometheus and Grafana stack:
+
+```sh
+docker compose up --build order-match-engine prometheus grafana
+```
+
+Grafana is available at <http://localhost:3000>, Prometheus at
+<http://localhost:9091>, and raw service metrics at
+<http://localhost:9090/metrics>.
+
+Run an end-to-end measurement against the public gRPC API:
+
+```sh
+go run ./cmd/loadtest -requests 10000 -concurrency 16 -run-id "$(date +%s)"
+```
+
+The load report includes throughput, p50/p95/p99, failures, parameters, and
+host metadata. Matcher benchmarks, profile capture, reference results,
+methodology, known limits, and the documented optimization are in
+[`docs/performance.md`](docs/performance.md).
+
 Regenerate the checked-in protobuf bindings with:
 
 ```sh
@@ -141,6 +172,7 @@ go test ./...
 go vet ./...
 go test -race ./...
 go test -run '^$' -bench . -benchmem ./internal/engine
+./scripts/profile.sh
 ```
 
 Formatting follows `gofmt`. Code must pass `go vet`, tests, and the race

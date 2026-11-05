@@ -38,6 +38,19 @@ type response struct {
 
 type getOrderCommand struct{ id domain.OrderID }
 type snapshotCommand struct{}
+type statsCommand struct{}
+
+// Stats is a point-in-time operational view produced by the single writer.
+// It intentionally contains only aggregate values so observability does not
+// expose or copy the order book.
+type Stats struct {
+	Sequence      domain.Sequence
+	QueueDepth    int
+	QueueCapacity int
+	BidLevels     int
+	AskLevels     int
+	RestingOrders int
+}
 
 // Engine serializes every operation through one bounded command queue and one
 // goroutine. After construction, its order book is owned exclusively by that
@@ -182,6 +195,22 @@ func (e *Engine) Snapshot(ctx context.Context) (BookSnapshot, error) {
 	return value.(BookSnapshot), nil
 }
 
+// Stats returns aggregate engine and book state. Like every book query, it is
+// serialized with mutations so the reported values form a consistent sample.
+func (e *Engine) Stats(ctx context.Context) (Stats, error) {
+	value, err := e.submit(ctx, statsCommand{})
+	if err != nil {
+		return Stats{}, err
+	}
+	return value.(Stats), nil
+}
+
+// QueueStats samples the channel occupancy without entering the queue. It is
+// safe for concurrent callers and remains available when the queue is full.
+func (e *Engine) QueueStats() (depth, capacity int) {
+	return len(e.queue), cap(e.queue)
+}
+
 // Shutdown rejects new commands, drains all accepted commands in FIFO order,
 // and waits for the worker to stop. A canceled context only stops the wait; a
 // later call may continue waiting for the same shutdown.
@@ -283,6 +312,12 @@ func (e *Engine) process(book *OrderBook, req request) {
 		result.value, result.err = book.GetOrder(command.id)
 	case snapshotCommand:
 		result.value = book.Snapshot()
+	case statsCommand:
+		result.value = Stats{
+			Sequence: book.nextSequence, QueueDepth: len(e.queue), QueueCapacity: cap(e.queue),
+			BidLevels: len(book.bids.prices), AskLevels: len(book.asks.prices),
+			RestingOrders: len(book.active),
+		}
 	default:
 		panic(fmt.Sprintf("engine invariant violated: unsupported command %T", command))
 	}
