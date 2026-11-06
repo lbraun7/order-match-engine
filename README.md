@@ -1,202 +1,220 @@
 # Order Matching Engine
 
-Order Matching Engine is a learning-focused implementation of a deterministic
-order book in Go. The project aims to demonstrate price-time priority,
-single-writer concurrency, recovery through an append-only event log, and
-measurable performance without coupling the matching core to transport or
-storage concerns.
+A deterministic, durable, multi-symbol order matching engine written in
+Go. The project demonstrates price-time priority, one single writer per book,
+recovery from replicated append-only event logs, asynchronous Postgres projections, a
+versioned gRPC API, market-data streaming, and measured performance.
 
-## Current scope
+Prices and quantities are integers: the caller owns the fixed-point scale. For
+example, `10100` can mean USD 101.00 when the chosen scale is cents.
 
-The repository currently includes the foundation, domain, limit-order
-matching, cancellation, queries, the single-writer engine, and a versioned
-gRPC API with market-data streaming. It provides a bounded command queue with
-explicit overload errors, context-aware operations, and graceful shutdown.
-Order queries and consistent book snapshots return immutable value copies.
-Accepted mutations are persisted to a checksummed append-only event log and
-recovered from periodic snapshots plus replay of subsequent commands. An
-optional asynchronous projector persists trades, current order state, and
-queryable order history in Postgres without putting the database on the
-matcher's critical path. A lazy multi-symbol router owns one single-writer
-engine, bounded queue, sequence space, event log, snapshot, and market-data
-broker per symbol.
+## Quick start
 
-The initial architecture separates the executable from the core packages:
+Requirements: Docker with Compose v2. No local Go installation is needed for
+the demo.
 
-```text
-cmd/order-match-engine/  application entry point
-api/v1/                  protobuf contract and generated Go API
-internal/domain/         domain types and invariants
-internal/engine/         order matching and command processing
-internal/grpcserver/     transport, idempotency, and market data
-internal/projection/     asynchronous Postgres query-model writer
-internal/observability/  Prometheus collectors and gRPC instrumentation
-migrations/              versioned Postgres schema
-cmd/loadtest/             end-to-end gRPC load generator
+```sh
+git clone https://github.com/lucasbraun96/order-match-engine.git
+cd order-match-engine
+docker compose up --build -d
+docker compose --profile demo run --rm --no-deps demo
 ```
 
-The core uses integers for prices and quantities, assigns ordering sequences
-inside the engine, and follows price-time priority. Transport, databases, and
-observability remain outside the core.
+The demo waits for the gRPC service, creates an isolated symbol, places a sell
+limit for 5 units at `10100`, then a crossing buy for 3 units at `10200`. Its
+JSON output contains the resting order, the trade at the maker price (`10100`),
+and a final snapshot with 2 units left on the ask. Run it again safely: IDs and
+the demo symbol are unique per execution.
 
-## Domain semantics
+The stack includes:
 
-- `Price` and `Quantity` are signed integers and must be positive. Callers
-  choose their fixed-point scale (for example, cents or basis points).
-- IDs must be non-empty and sequences start at one.
-- Commands never carry an ordering timestamp or sequence. The engine assigns a
-  monotonic sequence when it processes a command, so client clocks cannot alter
-  priority.
-- Orders expose state through accessors and can change only through validated
-  fill and cancellation transitions. A rejected transition leaves the order
-  unchanged.
-- Domain errors are stable sentinel values and can be matched with `errors.Is`.
-- The matcher accepts GTC limit orders. The time-in-force vocabulary already
-  includes IOC and FOK, but the matcher rejects them explicitly until their
-  execution semantics are implemented.
-- Bids are ordered from highest to lowest price and asks from lowest to highest.
-  Orders at the same price execute FIFO by their engine-assigned sequence.
-- Trades execute at the resting maker's price. Accepted orders, trades, and
-  successful cancellations share one monotonic sequence; the decimal trade ID
-  is derived from its sequence.
-- `OrderBook` is intentionally not concurrency-safe and is owned by the
-  `Engine` goroutine when used concurrently.
-- The engine serializes placement, cancellation, and queries through a bounded
-  FIFO queue. A full queue returns `ErrQueueFull`; shutdown rejects new work and
-  drains commands that were already accepted.
-- The router creates exactly one engine per symbol on first use. Symbols have
-  independent sequence numbers, order/trade ID namespaces, queues, persistence,
-  idempotency registries, streams, and projection checkpoints.
-- Canceling a caller context stops waiting but does not roll back a command
-  already accepted by the engine.
-- Cancellation removes an active order through its indexed list element, keeps
-  the remaining price level FIFO, and removes empty price levels.
-- Order queries include terminal orders. Book snapshots contain price-priority
-  levels, aggregate remaining quantity, and resting orders in FIFO order.
+| Component | Address | Purpose |
+| --- | --- | --- |
+| gRPC API | `localhost:50051` | Commands, queries, and market data |
+| Metrics and pprof | <http://localhost:9090> | Prometheus metrics and Go profiles |
+| Prometheus | <http://localhost:9091> | Metrics storage and queries |
+| Grafana | <http://localhost:3000> | Provisioned dashboard, no login required |
+| Postgres | `localhost:5433` | Asynchronous query projections |
 
-## Requirements
+Stop the stack with `docker compose down`. Named volumes intentionally retain
+the event logs, Postgres data, Prometheus data, and dashboards. To delete those
+volumes too, use `docker compose down --volumes` only when that data is no
+longer needed.
 
-- Go 1.24 or newer
+## Architecture
 
-## Development
+```mermaid
+flowchart LR
+    Client[Client] -->|gRPC| API[gRPC API]
+    API --> Router[Symbol router]
+    Router --> BTC[Single-writer engine<br/>BTC-USD]
+    Router --> ETH[Single-writer engine<br/>ETH-USD]
+    BTC --> BTCBook[In-memory book]
+    ETH --> ETHBook[In-memory book]
+    BTC -->|fsync before mutation| Log[(Primary event log)]
+    BTC -->|synchronous fsync| Replica[(Replica event log)]
+    Log --> Snapshot[(Recovery snapshot)]
+    Log --> Projector[Async projector]
+    Projector --> Postgres[(Postgres query models)]
+    API --> Stream[Snapshot + market-data deltas]
+    Metrics[Prometheus / pprof] -. observes .-> Router
+```
 
-Start the service on its default gRPC address (`:50051`):
+Each symbol owns a bounded command queue, goroutine, sequence space, book,
+event log, recovery snapshot, idempotency registry, market-data subscribers,
+and projection checkpoint. Different symbols run in parallel; each individual
+book retains exactly one writer.
+
+The core matching packages do not import gRPC, Postgres, or Prometheus. See
+[`docs/architecture.md`](docs/architecture.md) for the write/recovery paths and
+package boundaries, and the ADRs for the trade-offs behind the design:
+
+- [book structure](docs/adr/0001-order-book-structure.md);
+- [single-writer concurrency](docs/adr/0002-single-writer-engine.md);
+- [event-log durability](docs/adr/0003-event-log-and-recovery.md);
+- [asynchronous projections](docs/adr/0004-asynchronous-postgres-projections.md);
+- [multi-symbol routing](docs/adr/0005-multi-symbol-router.md);
+- [price-index evidence gate](docs/adr/0006-price-index-evidence.md);
+- [advanced order semantics](docs/adr/0007-advanced-order-semantics.md);
+- [synchronous log replication](docs/adr/0008-replicated-event-log.md).
+
+## Order semantics
+
+The matcher accepts GTC/IOC/FOK limit orders, IOC market orders, GTC
+stop-market and stop-limit orders, and GTC iceberg orders. Bids sort by
+descending price, asks by ascending price, and orders at the same price execute
+FIFO. A crossing order trades at the resting maker's price. Client timestamps
+never determine priority. Iceberg replenishment and stop activation join the
+back of their price level.
+
+Orders can select cancel-aggressor, cancel-resting, or cancel-both self-trade
+prevention. `MassCancel` cancels every active and dormant order in a symbol,
+optionally filtered by participant; omitting the symbol cancels that participant
+across every known book.
+
+Accepted orders, generated trades, and successful cancellations share a
+monotonic sequence within one symbol. Order IDs, trade IDs, client order IDs,
+and sequences are scoped to that symbol. The book never retains crossed sides,
+and every fill conserves quantity.
+
+The complete invariants, lifecycle, cancellation, idempotency, stream-gap, and
+durability semantics are in [`docs/domain-semantics.md`](docs/domain-semantics.md).
+
+## Run locally
+
+Go 1.24 or newer is required.
 
 ```sh
 go run ./cmd/order-match-engine
 ```
 
-Start the local Postgres and enable asynchronous projections:
+Then run the same end-to-end example outside Docker:
 
 ```sh
-docker compose up -d postgres
-go run ./cmd/order-match-engine \
-  -database-url 'postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable'
+go run ./cmd/demo
 ```
 
-The Compose service applies `migrations/000001_projections.up.sql` when its
-volume is created. The projection transaction writes an idempotency marker,
-the affected order versions and trades, and its checkpoint atomically. If
-Postgres is unavailable, retry attempts are bounded and logged; the matcher
-continues accepting durable commands, and later projection polls catch up from
-the event log.
-
-To discard and deterministically rebuild all query tables from the log:
+By default durable files live below `./data`, in one URL-safe base64 directory
+per symbol. Configure the service with flags such as:
 
 ```sh
 go run ./cmd/order-match-engine \
-  -database-url 'postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable' \
+  -address=:50051 \
+  -data-dir=./data \
+  -replica-data-dir=./replica-data \
+  -queue-capacity=1024 \
+  -snapshot-interval=1000 \
+  -database-url='postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable'
+```
+
+An order is accepted only after its command record is completely written and
+flushed to the primary and, when configured, the replica. Startup reconciles identical or prefix-related
+copies, repairs a missing/truncated/corrupt peer from the valid copy, restores a
+valid snapshot, and replays the remaining log. Conflicting replica histories,
+unsupported records, or non-contiguous sequences stop startup.
+Postgres is not on the matching critical path. If it is temporarily
+unavailable, bounded retries are logged and later polling resumes from the
+unchanged projection checkpoint.
+
+Rebuild all Postgres query tables from the source-of-truth event logs with:
+
+```sh
+go run ./cmd/order-match-engine \
+  -database-url='postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable' \
   -rebuild-projections
 ```
 
-`orders` contains the latest state, `order_history` contains every order state
-affected by each command, and `trades` contains executions. `projection_events`
-and `projection_checkpoint` make writers idempotent by durable event sequence.
+## Market data and idempotency
 
-By default durable files are stored below `./data`, in a URL-safe base64
-directory per symbol. Use `-data-dir` to select a different root and
-`-snapshot-interval` to tune snapshot frequency. An order is accepted only
-after its command is flushed to its symbol's event log; startup fails
-explicitly if a record is truncated or corrupt.
+Every RPC requires a case-sensitive, opaque `symbol`; `PlaceOrder` also
+requires `client_order_id`. Repeating the same client ID and payload in the
+same process and symbol returns the original response. Reusing it with a
+different payload returns gRPC `ALREADY_EXISTS`.
 
-The multi-symbol layout intentionally refuses to start when it finds a legacy
-top-level `data/events.log`, because the service cannot infer that book's
-symbol safely. Move the legacy log and snapshot into the URL-safe base64
-directory for the intended symbol before upgrading. Existing Postgres volumes
-created with the single-symbol schema must likewise be migrated or recreated;
-the checked-in initial migration describes the new composite `(symbol, id)`
-keys used by fresh environments.
+A market-data subscription receives a snapshot first. Deltas contain
+`previous_sequence` and `sequence`; a mismatch is a gap and the client must
+reconnect for a fresh snapshot. Slow consumers are disconnected with
+`RESOURCE_EXHAUSTED` rather than silently losing updates.
 
-Every RPC requires `symbol`, and `PlaceOrder` also requires a
-`client_order_id`. Repeating the same client ID and payload within the same
-symbol returns the original response without touching the engine; reusing it
-with a different payload returns `ALREADY_EXISTS`. The registry is
-process-local, scoped by symbol, and intentionally separate from the durable
-engine command log.
+The protobuf contract is [`api/v1/order_match.proto`](api/v1/order_match.proto).
 
-Every market-data subscription receives a book snapshot first. Each delta has
-`previous_sequence` and `sequence` high-water marks and can include an accepted
-order plus all trades it generated. A mismatch is a gap, so the client must
-reconnect for a fresh snapshot. A subscriber whose bounded buffer fills is
-disconnected with `RESOURCE_EXHAUSTED` instead of silently losing messages.
+## Test, fuzz, and benchmark
 
-## Performance and observability
-
-The service exposes Prometheus metrics and Go pprof profiles on `:9090` by
-default. Metrics cover gRPC throughput and latency, command-queue utilization,
-and aggregate book depth. Disable the listener with
-`-observability-address=''` or bind it to a trusted interface; pprof is not
-authenticated.
-
-Start the ready-to-use Prometheus and Grafana stack:
-
-```sh
-docker compose up --build order-match-engine prometheus grafana
-```
-
-Grafana is available at <http://localhost:3000>, Prometheus at
-<http://localhost:9091>, and raw service metrics at
-<http://localhost:9090/metrics>.
-
-Run an end-to-end measurement against the public gRPC API:
-
-```sh
-go run ./cmd/loadtest -requests 10000 -concurrency 16 -run-id "$(date +%s)"
-```
-
-Distribute the same load over multiple books with
-`-symbols BTC-USD,ETH-USD,SOL-USD`. The report records the selected symbols.
-
-The load report includes throughput, p50/p95/p99, failures, parameters, and
-host metadata. Matcher benchmarks, profile capture, reference results,
-methodology, known limits, and the documented optimization are in
-[`docs/performance.md`](docs/performance.md). The multi-symbol ownership and
-lifecycle decision is recorded in
-[`docs/adr/0005-multi-symbol-router.md`](docs/adr/0005-multi-symbol-router.md).
-
-Regenerate the checked-in protobuf bindings with:
-
-```sh
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-PATH="$(go env GOPATH)/bin:$PATH" protoc \
-  --go_out=. --go_opt=paths=source_relative \
-  --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-  api/v1/order_match.proto
-```
-
-Run the same checks used by continuous integration:
+Run the CI-equivalent checks:
 
 ```sh
 gofmt -w .
 go test ./...
 go vet ./...
 go test -race ./...
-go test -run '^$' -bench . -benchmem ./internal/engine
+```
+
+Run the seeded fuzz corpus as ordinary tests, then explore each target:
+
+```sh
+go test ./...
+go test -fuzz=FuzzReadAll -fuzztime=30s ./internal/eventlog
+go test -fuzz=FuzzCommandSequence -fuzztime=30s ./internal/engine
+go test -fuzz=FuzzRestoreOrderBook -fuzztime=30s ./internal/engine
+```
+
+The command-sequence target checks determinism, price ordering, uncrossed
+books, FIFO, active-index consistency, and quantity conservation. Parser
+targets exercise arbitrary event-log bytes and recovery snapshot state.
+
+Reproduce matcher benchmarks and profiles with:
+
+```sh
+./scripts/benchmark.sh
 ./scripts/profile.sh
 ```
 
-Formatting follows `gofmt`. Code must pass `go vet`, tests, and the race
-detector before it is merged. New behavior should include idiomatic,
-table-driven tests where appropriate; lint exceptions should be narrow and
-documented next to the affected code.
+[`docs/performance.md`](docs/performance.md) records the environment,
+parameters, reference results, allocations, limitations, profiles, and the
+measured optimization. The numbers are evidence from one machine, not a
+throughput promise.
+
+## Repository map
+
+```text
+api/v1/                  protobuf contract and generated Go API
+cmd/demo/                complete public-API example
+cmd/loadtest/            end-to-end gRPC load generator
+cmd/order-match-engine/  service entry point
+internal/domain/         value types, order lifecycle, and invariants
+internal/engine/         matcher, single writer, recovery, and symbol router
+internal/eventlog/       checksummed log and atomic snapshots
+internal/grpcserver/     transport, idempotency, and market data
+internal/observability/  Prometheus collectors and gRPC instrumentation
+internal/projection/     asynchronous Postgres query-model writer
+migrations/              versioned Postgres schema
+deploy/                  Prometheus and Grafana configuration
+docs/                    architecture, semantics, ADRs, and measurements
+```
+
+Known limitations and concrete next steps are documented in
+[`docs/limitations.md`](docs/limitations.md).
+
+## License
+
+This project is available under the [MIT License](LICENSE).

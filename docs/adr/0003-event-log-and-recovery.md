@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Accepted; amended by ADR 0008 when a replica path is configured.
 
 ## Decision
 

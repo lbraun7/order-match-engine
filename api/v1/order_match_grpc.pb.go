@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	OrderMatchService_PlaceOrder_FullMethodName       = "/ordermatch.v1.OrderMatchService/PlaceOrder"
 	OrderMatchService_CancelOrder_FullMethodName      = "/ordermatch.v1.OrderMatchService/CancelOrder"
+	OrderMatchService_MassCancel_FullMethodName       = "/ordermatch.v1.OrderMatchService/MassCancel"
 	OrderMatchService_GetOrder_FullMethodName         = "/ordermatch.v1.OrderMatchService/GetOrder"
 	OrderMatchService_GetBookSnapshot_FullMethodName  = "/ordermatch.v1.OrderMatchService/GetBookSnapshot"
 	OrderMatchService_StreamMarketData_FullMethodName = "/ordermatch.v1.OrderMatchService/StreamMarketData"
@@ -32,6 +33,7 @@ const (
 type OrderMatchServiceClient interface {
 	PlaceOrder(ctx context.Context, in *PlaceOrderRequest, opts ...grpc.CallOption) (*PlaceOrderResponse, error)
 	CancelOrder(ctx context.Context, in *CancelOrderRequest, opts ...grpc.CallOption) (*CancelOrderResponse, error)
+	MassCancel(ctx context.Context, in *MassCancelRequest, opts ...grpc.CallOption) (*MassCancelResponse, error)
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
 	GetBookSnapshot(ctx context.Context, in *GetBookSnapshotRequest, opts ...grpc.CallOption) (*GetBookSnapshotResponse, error)
 	StreamMarketData(ctx context.Context, in *StreamMarketDataRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[MarketDataUpdate], error)
@@ -59,6 +61,16 @@ func (c *orderMatchServiceClient) CancelOrder(ctx context.Context, in *CancelOrd
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CancelOrderResponse)
 	err := c.cc.Invoke(ctx, OrderMatchService_CancelOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderMatchServiceClient) MassCancel(ctx context.Context, in *MassCancelRequest, opts ...grpc.CallOption) (*MassCancelResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MassCancelResponse)
+	err := c.cc.Invoke(ctx, OrderMatchService_MassCancel_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +122,7 @@ type OrderMatchService_StreamMarketDataClient = grpc.ServerStreamingClient[Marke
 type OrderMatchServiceServer interface {
 	PlaceOrder(context.Context, *PlaceOrderRequest) (*PlaceOrderResponse, error)
 	CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error)
+	MassCancel(context.Context, *MassCancelRequest) (*MassCancelResponse, error)
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)
 	GetBookSnapshot(context.Context, *GetBookSnapshotRequest) (*GetBookSnapshotResponse, error)
 	StreamMarketData(*StreamMarketDataRequest, grpc.ServerStreamingServer[MarketDataUpdate]) error
@@ -128,6 +141,9 @@ func (UnimplementedOrderMatchServiceServer) PlaceOrder(context.Context, *PlaceOr
 }
 func (UnimplementedOrderMatchServiceServer) CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOrder not implemented")
+}
+func (UnimplementedOrderMatchServiceServer) MassCancel(context.Context, *MassCancelRequest) (*MassCancelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MassCancel not implemented")
 }
 func (UnimplementedOrderMatchServiceServer) GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetOrder not implemented")
@@ -195,6 +211,24 @@ func _OrderMatchService_CancelOrder_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrderMatchService_MassCancel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MassCancelRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderMatchServiceServer).MassCancel(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderMatchService_MassCancel_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderMatchServiceServer).MassCancel(ctx, req.(*MassCancelRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _OrderMatchService_GetOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetOrderRequest)
 	if err := dec(in); err != nil {
@@ -256,6 +290,10 @@ var OrderMatchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelOrder",
 			Handler:    _OrderMatchService_CancelOrder_Handler,
+		},
+		{
+			MethodName: "MassCancel",
+			Handler:    _OrderMatchService_MassCancel_Handler,
 		},
 		{
 			MethodName: "GetOrder",

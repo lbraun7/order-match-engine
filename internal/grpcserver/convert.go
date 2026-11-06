@@ -20,8 +20,19 @@ func orderToProto(order engine.OrderSnapshot) *ordermatchv1.Order {
 		OrderType: ordermatchv1.OrderType(order.Type), TimeInForce: ordermatchv1.TimeInForce(order.TimeInForce),
 		Price: int64(order.Price), OriginalQuantity: int64(order.OriginalQuantity),
 		RemainingQuantity: int64(order.RemainingQuantity), ExecutedQuantity: int64(order.ExecutedQuantity),
-		Status: ordermatchv1.OrderStatus(order.Status),
+		Status: ordermatchv1.OrderStatus(order.Status), ParticipantId: string(order.ParticipantID),
+		StopPrice: int64(order.StopPrice), DisplayQuantity: int64(order.DisplayQuantity),
+		VisibleQuantity: int64(order.VisibleQuantity), SelfTradePrevention: ordermatchv1.SelfTradePrevention(order.SelfTradePrevention),
+		Dormant: order.Dormant,
 	}
+}
+
+func ordersToProto(orders []engine.OrderSnapshot) []*ordermatchv1.Order {
+	result := make([]*ordermatchv1.Order, 0, len(orders))
+	for _, order := range orders {
+		result = append(result, orderToProto(order))
+	}
+	return result
 }
 
 func tradeToProto(trade domain.Trade) *ordermatchv1.Trade {

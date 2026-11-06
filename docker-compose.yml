@@ -1,15 +1,39 @@
 services:
+  engine-data-init:
+    image: alpine:3.22
+    command: ["chown", "-R", "65532:65532", "/var/lib/order-match-engine", "/var/lib/order-match-replica"]
+    volumes:
+      - engine-data:/var/lib/order-match-engine
+      - engine-replica-data:/var/lib/order-match-replica
+
   order-match-engine:
     build: .
     command:
       - -address=:50051
       - -observability-address=:9090
       - -data-dir=/var/lib/order-match-engine
+      - -replica-data-dir=/var/lib/order-match-replica
+      - -database-url=postgres://order_match:order_match@postgres:5432/order_match?sslmode=disable
     ports:
       - "50051:50051"
       - "9090:9090"
     volumes:
       - engine-data:/var/lib/order-match-engine
+      - engine-replica-data:/var/lib/order-match-replica
+    depends_on:
+      engine-data-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  demo:
+    profiles: ["demo"]
+    build: .
+    entrypoint: ["/demo"]
+    command:
+      - -target=order-match-engine:50051
+    depends_on:
+      - order-match-engine
 
   postgres:
     image: postgres:17-alpine
@@ -27,6 +51,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./migrations/000001_projections.up.sql:/docker-entrypoint-initdb.d/000001_projections.up.sql:ro
+      - ./migrations/000002_advanced_orders.up.sql:/docker-entrypoint-initdb.d/000002_advanced_orders.up.sql:ro
 
   prometheus:
     image: prom/prometheus:v3.5.0
@@ -58,6 +83,7 @@ services:
 
 volumes:
   engine-data:
+  engine-replica-data:
   postgres-data:
   prometheus-data:
   grafana-data:

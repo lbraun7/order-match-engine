@@ -135,6 +135,81 @@ func TestEmptySymbolIsRejected(t *testing.T) {
 	}
 }
 
+func TestAdvancedOrdersAndMassCancelThroughGRPC(t *testing.T) {
+	client, cleanup := testClient(t, 8)
+	defer cleanup()
+	ctx := context.Background()
+
+	iceberg := limitOrder("ice-client", "ice", ordermatchv1.Side_SIDE_SELL, 100, 5)
+	iceberg.OrderType = ordermatchv1.OrderType_ORDER_TYPE_ICEBERG
+	iceberg.DisplayQuantity = 2
+	iceberg.ParticipantId = "maker"
+	placed, err := client.PlaceOrder(ctx, iceberg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if placed.Order.VisibleQuantity != 2 || placed.Order.DisplayQuantity != 2 || placed.Order.ParticipantId != "maker" {
+		t.Fatalf("iceberg response = %+v", placed.Order)
+	}
+	market := &ordermatchv1.PlaceOrderRequest{
+		ClientOrderId: "market-client", OrderId: "market", Symbol: "BTC-USD", ParticipantId: "taker",
+		Side: ordermatchv1.Side_SIDE_BUY, OrderType: ordermatchv1.OrderType_ORDER_TYPE_MARKET,
+		TimeInForce: ordermatchv1.TimeInForce_TIME_IN_FORCE_IOC, Quantity: 1,
+	}
+	matched, err := client.PlaceOrder(ctx, market)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched.Trades) != 1 || matched.Trades[0].Price != 100 || matched.Order.Status != ordermatchv1.OrderStatus_ORDER_STATUS_FILLED {
+		t.Fatalf("market response = %+v", matched)
+	}
+	other := limitOrder("other-client", "other", ordermatchv1.Side_SIDE_BUY, 90, 1)
+	other.ParticipantId = "other"
+	if _, err := client.PlaceOrder(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	canceled, err := client.MassCancel(ctx, &ordermatchv1.MassCancelRequest{Symbol: "BTC-USD", ParticipantId: "maker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canceled.Orders) != 1 || canceled.Orders[0].OrderId != "ice" || canceled.Orders[0].Status != ordermatchv1.OrderStatus_ORDER_STATUS_CANCELED {
+		t.Fatalf("mass cancel = %+v", canceled)
+	}
+	remaining, err := client.GetOrder(ctx, &ordermatchv1.GetOrderRequest{Symbol: "BTC-USD", OrderId: "other"})
+	if err != nil || remaining.Order.Status != ordermatchv1.OrderStatus_ORDER_STATUS_OPEN {
+		t.Fatalf("unrelated order = %+v err=%v", remaining, err)
+	}
+}
+
+func TestMassCancelParticipantAcrossKnownSymbols(t *testing.T) {
+	client, cleanup := testClient(t, 8)
+	defer cleanup()
+	ctx := context.Background()
+	for _, symbol := range []string{"BTC-USD", "ETH-USD"} {
+		order := limitOrder("client-"+symbol, "order-"+symbol, ordermatchv1.Side_SIDE_BUY, 90, 1)
+		order.Symbol = symbol
+		order.ParticipantId = "participant"
+		if _, err := client.PlaceOrder(ctx, order); err != nil {
+			t.Fatal(err)
+		}
+	}
+	response, err := client.MassCancel(ctx, &ordermatchv1.MassCancelRequest{ParticipantId: "participant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Results) != 2 || response.Results[0].Symbol != "BTC-USD" || response.Results[1].Symbol != "ETH-USD" {
+		t.Fatalf("cross-symbol results = %+v", response.Results)
+	}
+	for _, result := range response.Results {
+		if len(result.Orders) != 1 || result.Orders[0].Status != ordermatchv1.OrderStatus_ORDER_STATUS_CANCELED {
+			t.Fatalf("result = %+v", result)
+		}
+	}
+	if _, err := client.MassCancel(ctx, &ordermatchv1.MassCancelRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("empty cross-symbol mass cancel code = %s", status.Code(err))
+	}
+}
+
 func TestBrokerDisconnectsSlowSubscriberWithoutDroppingIndividualUpdates(t *testing.T) {
 	b := newBroker(1)
 	sub := b.subscribe()

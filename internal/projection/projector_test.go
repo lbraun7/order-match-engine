@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lucasbraun96/order-match-engine/internal/domain"
+	"github.com/lucasbraun96/order-match-engine/internal/engine"
 	"github.com/lucasbraun96/order-match-engine/internal/eventlog"
 )
 
@@ -98,6 +99,48 @@ func TestProjectorRebuildResetsAndReplays(t *testing.T) {
 	}
 	if store.resets != 1 || store.checkpoint != 2 || len(store.events) != 2 {
 		t.Fatalf("resets/checkpoint/events = %d/%d/%d", store.resets, store.checkpoint, len(store.events))
+	}
+}
+
+func TestReducerProjectsStopActivationAndMassCancel(t *testing.T) {
+	book := engine.NewOrderBook()
+	commands := []struct {
+		sequence uint64
+		type_    eventlog.Type
+		command  any
+	}{
+		{1, eventlog.TypePlace, domain.PlaceOrder{OrderID: "ask", ParticipantID: "maker", Side: domain.SideSell, OrderType: domain.OrderTypeIceberg, TimeInForce: domain.TimeInForceGTC, Price: 100, Quantity: 3, DisplayQuantity: 1}},
+		{2, eventlog.TypePlace, domain.PlaceOrder{OrderID: "stop", ParticipantID: "stopper", Side: domain.SideSell, OrderType: domain.OrderTypeStopMarket, TimeInForce: domain.TimeInForceGTC, StopPrice: 100, Quantity: 1}},
+		{3, eventlog.TypePlace, domain.PlaceOrder{OrderID: "trigger", Side: domain.SideBuy, OrderType: domain.OrderTypeLimit, TimeInForce: domain.TimeInForceGTC, Price: 100, Quantity: 1}},
+		{5, eventlog.TypeMassCancel, domain.MassCancel{ParticipantID: "maker"}},
+	}
+	var projected Event
+	for _, item := range commands {
+		payload, err := json.Marshal(item.command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		projected, err = reduce(book, eventlog.Event{Sequence: item.sequence, Type: item.type_, Payload: payload})
+		if err != nil {
+			t.Fatalf("reduce sequence %d: %v", item.sequence, err)
+		}
+		if item.sequence == 3 {
+			var foundStop bool
+			for _, order := range projected.Orders {
+				if order.ID == "stop" {
+					foundStop = true
+					if order.Dormant || order.Status != domain.OrderStatusCanceled {
+						t.Fatalf("projected activated stop = %+v", order)
+					}
+				}
+			}
+			if !foundStop {
+				t.Fatal("activated stop missing from affected projection orders")
+			}
+		}
+	}
+	if len(projected.Orders) != 1 || projected.Orders[0].ID != "ask" || projected.Orders[0].Status != domain.OrderStatusCanceled {
+		t.Fatalf("mass-cancel projection = %+v", projected.Orders)
 	}
 }
 

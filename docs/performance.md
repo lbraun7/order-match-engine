@@ -34,6 +34,14 @@ Median values from three matcher samples:
 | Match one maker and taker | 353.7 ns/op | 337.4 ns/op | 1,336 B/op, 15 allocs/op |
 | Cancel one resting order | 300.4 ns/op | 283.7 ns/op | 1,128 B/op, 12 allocs/op |
 
+Those Phase 8 values predate advanced-order `affected_orders` bookkeeping.
+A one-second sanity run on the final advanced-order implementation on
+2026-11-06 measured 701.6 ns/op for placement, 1,293 ns/op for a maker/taker
+match, and 742.4 ns/op for cancellation, with 15, 24, and 15 allocations
+respectively. This is an explicit feature-cost record, not a claim that the
+older numbers still describe the current reducer. Use `./scripts/benchmark.sh`
+for statistically repeated results on the target machine.
+
 The isolated sorted-price-index benchmark after the change measured 73.5 ns
 at 100 levels, 629 ns at 1,000 levels, and 4.14 us at 10,000 levels. The
 reported bytes are primarily the copied slice used to keep benchmark
@@ -110,6 +118,31 @@ slice shift. This changes the search/sort work from O(n log n) to O(log n)
 search plus the unavoidable O(n) contiguous shift. The basic operations above
 improved by roughly 5-6% and each uses one fewer allocation on the reference
 machine.
+
+### Specialized price-index evidence gate
+
+Phase 10's optional-increment review compared the production sorted slice to a
+binary heap with `BenchmarkPriceIndexAlternatives`. A one-second run on
+2026-11-06 (Apple M4, darwin/arm64, Go 1.27.0) measured:
+
+| Levels | Sorted slice | Binary heap | Sorted/heap allocations |
+| ---: | ---: | ---: | ---: |
+| 100 | 126.3 ns/op | 144.5 ns/op | 1 / 2 |
+| 1,000 | 1,099 ns/op | 1,002 ns/op | 1 / 3 |
+| 10,000 | 6,869 ns/op | 5,648 ns/op | 1 / 3 |
+
+Reproduce with:
+
+```sh
+go test -run '^$' -bench '^BenchmarkPriceIndexAlternatives$' \
+  -benchmem -benchtime=1s ./internal/engine
+```
+
+The heap was slower at shallow depth and only about 18% faster for isolated
+10,000-level insertion. That comparison excludes the heap's auxiliary index or
+tombstones for arbitrary cancellation and the sort needed for snapshots. The
+evidence does not justify increasing production complexity, so the sorted
+slice remains. See ADR 0006.
 
 For a live service, the same HTTP endpoint provides all standard Go profiles:
 

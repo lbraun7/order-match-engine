@@ -27,8 +27,9 @@ var (
 type Type uint8
 
 const (
-	TypePlace  Type = 1
-	TypeCancel Type = 2
+	TypePlace      Type = 1
+	TypeCancel     Type = 2
+	TypeMassCancel Type = 3
 )
 
 type Event struct {

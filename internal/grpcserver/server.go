@@ -68,7 +68,9 @@ func (s *Server) PlaceOrder(ctx context.Context, req *ordermatchv1.PlaceOrderReq
 	if err := symbol.Validate(); err != nil {
 		return nil, mapError(err)
 	}
-	fingerprint := fmt.Sprintf("%s\x00%d\x00%d\x00%d\x00%d\x00%d", req.OrderId, req.Side, req.OrderType, req.TimeInForce, req.Price, req.Quantity)
+	fingerprint := fmt.Sprintf("%s\x00%d\x00%d\x00%d\x00%d\x00%d\x00%s\x00%d\x00%d\x00%d",
+		req.OrderId, req.Side, req.OrderType, req.TimeInForce, req.Price, req.Quantity,
+		req.ParticipantId, req.StopPrice, req.DisplayQuantity, req.SelfTradePrevention)
 
 	state := s.state(symbol)
 	state.mutationMu.Lock()
@@ -83,15 +85,60 @@ func (s *Server) PlaceOrder(ctx context.Context, req *ordermatchv1.PlaceOrderReq
 	result, err := s.router.PlaceOrder(ctx, symbol, domain.PlaceOrder{
 		OrderID: domain.OrderID(req.OrderId), Side: fromProtoSide(req.Side),
 		OrderType: fromProtoOrderType(req.OrderType), TimeInForce: fromProtoTimeInForce(req.TimeInForce),
-		Price: domain.Price(req.Price), Quantity: domain.Quantity(req.Quantity),
+		Price: domain.Price(req.Price), Quantity: domain.Quantity(req.Quantity), ParticipantID: domain.ParticipantID(req.ParticipantId),
+		StopPrice: domain.Price(req.StopPrice), DisplayQuantity: domain.Quantity(req.DisplayQuantity),
+		SelfTradePrevention: domain.SelfTradePrevention(req.SelfTradePrevention),
 	})
 	if err != nil {
 		return nil, mapError(err)
 	}
-	response := &ordermatchv1.PlaceOrderResponse{Order: orderToProto(result.Order), Trades: tradesToProto(result.Trades)}
+	response := &ordermatchv1.PlaceOrderResponse{Order: orderToProto(result.Order), Trades: tradesToProto(result.Trades), AffectedOrders: ordersToProto(result.AffectedOrders)}
 	response.Sequence = maxSequence(result.Order.Sequence, result.Trades)
 	state.idempotency[req.ClientOrderId] = idempotencyEntry{fingerprint: fingerprint, response: proto.Clone(response).(*ordermatchv1.PlaceOrderResponse)}
-	state.market.publish(&ordermatchv1.MarketDataUpdate{Symbol: req.Symbol, Sequence: response.Sequence, PreviousSequence: uint64(result.Order.Sequence - 1), Payload: &ordermatchv1.MarketDataUpdate_Delta{Delta: &ordermatchv1.BookDelta{Mutation: ordermatchv1.BookMutation_BOOK_MUTATION_ORDER_ACCEPTED, Order: response.Order, Trades: response.Trades}}})
+	state.market.publish(&ordermatchv1.MarketDataUpdate{Symbol: req.Symbol, Sequence: response.Sequence, PreviousSequence: uint64(result.Order.Sequence - 1), Payload: &ordermatchv1.MarketDataUpdate_Delta{Delta: &ordermatchv1.BookDelta{Mutation: ordermatchv1.BookMutation_BOOK_MUTATION_ORDER_ACCEPTED, Order: response.Order, Trades: response.Trades, AffectedOrders: ordersToProto(result.AffectedOrders)}}})
+	return response, nil
+}
+
+func (s *Server) MassCancel(ctx context.Context, req *ordermatchv1.MassCancelRequest) (*ordermatchv1.MassCancelResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if req.Symbol == "" {
+		participant := domain.ParticipantID(req.ParticipantId)
+		if err := participant.Validate(); err != nil {
+			return nil, mapError(err)
+		}
+		response := &ordermatchv1.MassCancelResponse{}
+		for _, symbol := range s.router.Symbols() {
+			result, err := s.massCancelSymbol(ctx, symbol, participant)
+			if err != nil {
+				return nil, err
+			}
+			response.Results = append(response.Results, result)
+		}
+		return response, nil
+	}
+	symbol := domain.Symbol(req.Symbol)
+	if err := symbol.Validate(); err != nil {
+		return nil, mapError(err)
+	}
+	result, err := s.massCancelSymbol(ctx, symbol, domain.ParticipantID(req.ParticipantId))
+	if err != nil {
+		return nil, err
+	}
+	return &ordermatchv1.MassCancelResponse{Sequence: result.Sequence, Orders: result.Orders, Results: []*ordermatchv1.SymbolMassCancelResult{result}}, nil
+}
+
+func (s *Server) massCancelSymbol(ctx context.Context, symbol domain.Symbol, participant domain.ParticipantID) (*ordermatchv1.SymbolMassCancelResult, error) {
+	state := s.state(symbol)
+	state.mutationMu.Lock()
+	defer state.mutationMu.Unlock()
+	result, err := s.router.MassCancel(ctx, symbol, domain.MassCancel{ParticipantID: participant})
+	if err != nil {
+		return nil, mapError(err)
+	}
+	response := &ordermatchv1.SymbolMassCancelResult{Symbol: string(symbol), Sequence: uint64(result.Sequence), Orders: ordersToProto(result.Orders)}
+	state.market.publish(&ordermatchv1.MarketDataUpdate{Symbol: string(symbol), Sequence: response.Sequence, PreviousSequence: response.Sequence - 1, Payload: &ordermatchv1.MarketDataUpdate_Delta{Delta: &ordermatchv1.BookDelta{Mutation: ordermatchv1.BookMutation_BOOK_MUTATION_MASS_CANCELED, AffectedOrders: response.Orders}}})
 	return response, nil
 }
 
@@ -201,10 +248,12 @@ func mapError(err error) error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return status.Error(codes.DeadlineExceeded, err.Error())
 	case errors.Is(err, domain.ErrInvalidOrderID), errors.Is(err, domain.ErrInvalidTradeID),
-		errors.Is(err, domain.ErrInvalidSymbol),
+		errors.Is(err, domain.ErrInvalidSymbol), errors.Is(err, domain.ErrInvalidParticipantID),
 		errors.Is(err, domain.ErrInvalidSequence), errors.Is(err, domain.ErrInvalidPrice),
 		errors.Is(err, domain.ErrInvalidQuantity), errors.Is(err, domain.ErrInvalidSide),
-		errors.Is(err, domain.ErrInvalidOrderType), errors.Is(err, domain.ErrInvalidTimeInForce):
+		errors.Is(err, domain.ErrInvalidOrderType), errors.Is(err, domain.ErrInvalidTimeInForce),
+		errors.Is(err, domain.ErrInvalidSelfTradePrevention), errors.Is(err, domain.ErrInvalidDisplayQuantity),
+		errors.Is(err, domain.ErrInvalidStopPrice), errors.Is(err, engine.ErrInvalidOrderSemantics):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, engine.ErrDuplicateOrderID):
 		return status.Error(codes.AlreadyExists, err.Error())
@@ -212,8 +261,6 @@ func mapError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, domain.ErrOrderNotOpen):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, engine.ErrUnsupportedTimeInForce):
-		return status.Error(codes.Unimplemented, err.Error())
 	case errors.Is(err, engine.ErrQueueFull):
 		return status.Error(codes.ResourceExhausted, err.Error())
 	case errors.Is(err, engine.ErrEngineClosed), errors.Is(err, engine.ErrRouterClosed):

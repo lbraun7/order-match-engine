@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"syscall"
 	"time"
 
@@ -33,6 +34,7 @@ func main() {
 	queueCapacity := flag.Int("queue-capacity", 1024, "engine command queue capacity")
 	subscriberBuffer := flag.Int("subscriber-buffer", grpcserver.DefaultSubscriberBuffer, "market-data updates buffered per subscriber")
 	dataDirectory := flag.String("data-dir", "data", "directory for the event log and recovery snapshot")
+	replicaDataDirectory := flag.String("replica-data-dir", "", "optional independent directory for a synchronous event-log replica")
 	snapshotInterval := flag.Uint64("snapshot-interval", 1000, "accepted commands between recovery snapshots; zero disables snapshots")
 	databaseURL := flag.String("database-url", "", "Postgres URL for asynchronous projections; empty disables projections")
 	rebuildProjections := flag.Bool("rebuild-projections", false, "clear and rebuild Postgres projections from the event log before serving")
@@ -42,6 +44,14 @@ func main() {
 
 	if err := os.MkdirAll(*dataDirectory, 0o700); err != nil {
 		log.Fatal(err)
+	}
+	if *replicaDataDirectory != "" {
+		if filepath.Clean(*replicaDataDirectory) == filepath.Clean(*dataDirectory) {
+			log.Fatal("replica-data-dir must differ from data-dir")
+		}
+		if err := os.MkdirAll(*replicaDataDirectory, 0o700); err != nil {
+			log.Fatal(err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(*dataDirectory, "events.log")); err == nil {
 		log.Fatal("legacy single-symbol event log found; move it and snapshot.json into the URL-safe base64 directory for its symbol before starting the multi-symbol service")
@@ -65,9 +75,17 @@ func main() {
 			return nil, err
 		}
 		logPath := filepath.Join(directory, "events.log")
+		var replicaLogPath string
+		if *replicaDataDirectory != "" {
+			replicaDirectory := filepath.Join(*replicaDataDirectory, base64.RawURLEncoding.EncodeToString([]byte(symbol)))
+			if err := os.MkdirAll(replicaDirectory, 0o700); err != nil {
+				return nil, err
+			}
+			replicaLogPath = filepath.Join(replicaDirectory, "events.log")
+		}
 		matchingEngine, err := engine.NewPersistentEngine(*queueCapacity, engine.PersistenceConfig{
 			LogPath: logPath, SnapshotPath: filepath.Join(directory, "snapshot.json"),
-			SnapshotInterval: *snapshotInterval,
+			SnapshotInterval: *snapshotInterval, ReplicaLogPath: replicaLogPath,
 		})
 		if err != nil {
 			return nil, err
@@ -97,7 +115,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for _, symbol := range persistedSymbols(*dataDirectory) {
+	for _, symbol := range persistedSymbols(*dataDirectory, *replicaDataDirectory) {
 		if _, err := router.Snapshot(context.Background(), symbol); err != nil {
 			log.Fatalf("restore symbol %s: %v", symbol, err)
 		}
@@ -156,24 +174,33 @@ func main() {
 	}
 }
 
-func persistedSymbols(dataDirectory string) []domain.Symbol {
-	entries, err := os.ReadDir(dataDirectory)
-	if err != nil {
-		return nil
+func persistedSymbols(dataDirectories ...string) []domain.Symbol {
+	unique := make(map[domain.Symbol]bool)
+	for _, dataDirectory := range dataDirectories {
+		if dataDirectory == "" {
+			continue
+		}
+		entries, err := os.ReadDir(dataDirectory)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(dataDirectory, entry.Name(), "events.log")); err != nil {
+				continue
+			}
+			decoded, err := base64.RawURLEncoding.DecodeString(entry.Name())
+			if err == nil && len(decoded) > 0 {
+				unique[domain.Symbol(decoded)] = true
+			}
+		}
 	}
-	var symbols []domain.Symbol
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(dataDirectory, entry.Name(), "events.log")); err != nil {
-			continue
-		}
-		decoded, err := base64.RawURLEncoding.DecodeString(entry.Name())
-		if err != nil || len(decoded) == 0 {
-			continue
-		}
-		symbols = append(symbols, domain.Symbol(decoded))
+	symbols := make([]domain.Symbol, 0, len(unique))
+	for symbol := range unique {
+		symbols = append(symbols, symbol)
 	}
+	sort.Slice(symbols, func(i, j int) bool { return symbols[i] < symbols[j] })
 	return symbols
 }

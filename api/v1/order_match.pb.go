@@ -75,6 +75,10 @@ type OrderType int32
 const (
 	OrderType_ORDER_TYPE_UNSPECIFIED OrderType = 0
 	OrderType_ORDER_TYPE_LIMIT       OrderType = 1
+	OrderType_ORDER_TYPE_MARKET      OrderType = 2
+	OrderType_ORDER_TYPE_STOP_MARKET OrderType = 3
+	OrderType_ORDER_TYPE_STOP_LIMIT  OrderType = 4
+	OrderType_ORDER_TYPE_ICEBERG     OrderType = 5
 )
 
 // Enum value maps for OrderType.
@@ -82,10 +86,18 @@ var (
 	OrderType_name = map[int32]string{
 		0: "ORDER_TYPE_UNSPECIFIED",
 		1: "ORDER_TYPE_LIMIT",
+		2: "ORDER_TYPE_MARKET",
+		3: "ORDER_TYPE_STOP_MARKET",
+		4: "ORDER_TYPE_STOP_LIMIT",
+		5: "ORDER_TYPE_ICEBERG",
 	}
 	OrderType_value = map[string]int32{
 		"ORDER_TYPE_UNSPECIFIED": 0,
 		"ORDER_TYPE_LIMIT":       1,
+		"ORDER_TYPE_MARKET":      2,
+		"ORDER_TYPE_STOP_MARKET": 3,
+		"ORDER_TYPE_STOP_LIMIT":  4,
+		"ORDER_TYPE_ICEBERG":     5,
 	}
 )
 
@@ -114,6 +126,58 @@ func (x OrderType) Number() protoreflect.EnumNumber {
 // Deprecated: Use OrderType.Descriptor instead.
 func (OrderType) EnumDescriptor() ([]byte, []int) {
 	return file_api_v1_order_match_proto_rawDescGZIP(), []int{1}
+}
+
+type SelfTradePrevention int32
+
+const (
+	SelfTradePrevention_SELF_TRADE_PREVENTION_NONE             SelfTradePrevention = 0
+	SelfTradePrevention_SELF_TRADE_PREVENTION_CANCEL_AGGRESSOR SelfTradePrevention = 1
+	SelfTradePrevention_SELF_TRADE_PREVENTION_CANCEL_RESTING   SelfTradePrevention = 2
+	SelfTradePrevention_SELF_TRADE_PREVENTION_CANCEL_BOTH      SelfTradePrevention = 3
+)
+
+// Enum value maps for SelfTradePrevention.
+var (
+	SelfTradePrevention_name = map[int32]string{
+		0: "SELF_TRADE_PREVENTION_NONE",
+		1: "SELF_TRADE_PREVENTION_CANCEL_AGGRESSOR",
+		2: "SELF_TRADE_PREVENTION_CANCEL_RESTING",
+		3: "SELF_TRADE_PREVENTION_CANCEL_BOTH",
+	}
+	SelfTradePrevention_value = map[string]int32{
+		"SELF_TRADE_PREVENTION_NONE":             0,
+		"SELF_TRADE_PREVENTION_CANCEL_AGGRESSOR": 1,
+		"SELF_TRADE_PREVENTION_CANCEL_RESTING":   2,
+		"SELF_TRADE_PREVENTION_CANCEL_BOTH":      3,
+	}
+)
+
+func (x SelfTradePrevention) Enum() *SelfTradePrevention {
+	p := new(SelfTradePrevention)
+	*p = x
+	return p
+}
+
+func (x SelfTradePrevention) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SelfTradePrevention) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_order_match_proto_enumTypes[2].Descriptor()
+}
+
+func (SelfTradePrevention) Type() protoreflect.EnumType {
+	return &file_api_v1_order_match_proto_enumTypes[2]
+}
+
+func (x SelfTradePrevention) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SelfTradePrevention.Descriptor instead.
+func (SelfTradePrevention) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{2}
 }
 
 type TimeInForce int32
@@ -152,11 +216,11 @@ func (x TimeInForce) String() string {
 }
 
 func (TimeInForce) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_v1_order_match_proto_enumTypes[2].Descriptor()
+	return file_api_v1_order_match_proto_enumTypes[3].Descriptor()
 }
 
 func (TimeInForce) Type() protoreflect.EnumType {
-	return &file_api_v1_order_match_proto_enumTypes[2]
+	return &file_api_v1_order_match_proto_enumTypes[3]
 }
 
 func (x TimeInForce) Number() protoreflect.EnumNumber {
@@ -165,7 +229,7 @@ func (x TimeInForce) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TimeInForce.Descriptor instead.
 func (TimeInForce) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{2}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{3}
 }
 
 type OrderStatus int32
@@ -207,11 +271,11 @@ func (x OrderStatus) String() string {
 }
 
 func (OrderStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_v1_order_match_proto_enumTypes[3].Descriptor()
+	return file_api_v1_order_match_proto_enumTypes[4].Descriptor()
 }
 
 func (OrderStatus) Type() protoreflect.EnumType {
-	return &file_api_v1_order_match_proto_enumTypes[3]
+	return &file_api_v1_order_match_proto_enumTypes[4]
 }
 
 func (x OrderStatus) Number() protoreflect.EnumNumber {
@@ -220,7 +284,7 @@ func (x OrderStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OrderStatus.Descriptor instead.
 func (OrderStatus) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{3}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{4}
 }
 
 type BookMutation int32
@@ -229,6 +293,7 @@ const (
 	BookMutation_BOOK_MUTATION_UNSPECIFIED    BookMutation = 0
 	BookMutation_BOOK_MUTATION_ORDER_ACCEPTED BookMutation = 1
 	BookMutation_BOOK_MUTATION_ORDER_CANCELED BookMutation = 2
+	BookMutation_BOOK_MUTATION_MASS_CANCELED  BookMutation = 3
 )
 
 // Enum value maps for BookMutation.
@@ -237,11 +302,13 @@ var (
 		0: "BOOK_MUTATION_UNSPECIFIED",
 		1: "BOOK_MUTATION_ORDER_ACCEPTED",
 		2: "BOOK_MUTATION_ORDER_CANCELED",
+		3: "BOOK_MUTATION_MASS_CANCELED",
 	}
 	BookMutation_value = map[string]int32{
 		"BOOK_MUTATION_UNSPECIFIED":    0,
 		"BOOK_MUTATION_ORDER_ACCEPTED": 1,
 		"BOOK_MUTATION_ORDER_CANCELED": 2,
+		"BOOK_MUTATION_MASS_CANCELED":  3,
 	}
 )
 
@@ -256,11 +323,11 @@ func (x BookMutation) String() string {
 }
 
 func (BookMutation) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_v1_order_match_proto_enumTypes[4].Descriptor()
+	return file_api_v1_order_match_proto_enumTypes[5].Descriptor()
 }
 
 func (BookMutation) Type() protoreflect.EnumType {
-	return &file_api_v1_order_match_proto_enumTypes[4]
+	return &file_api_v1_order_match_proto_enumTypes[5]
 }
 
 func (x BookMutation) Number() protoreflect.EnumNumber {
@@ -269,7 +336,7 @@ func (x BookMutation) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use BookMutation.Descriptor instead.
 func (BookMutation) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{4}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{5}
 }
 
 type Order struct {
@@ -284,8 +351,17 @@ type Order struct {
 	RemainingQuantity int64                  `protobuf:"varint,8,opt,name=remaining_quantity,json=remainingQuantity,proto3" json:"remaining_quantity,omitempty"`
 	ExecutedQuantity  int64                  `protobuf:"varint,9,opt,name=executed_quantity,json=executedQuantity,proto3" json:"executed_quantity,omitempty"`
 	Status            OrderStatus            `protobuf:"varint,10,opt,name=status,proto3,enum=ordermatch.v1.OrderStatus" json:"status,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	ParticipantId     string                 `protobuf:"bytes,11,opt,name=participant_id,json=participantId,proto3" json:"participant_id,omitempty"`
+	// Trigger for stop orders; zero for all other types.
+	StopPrice int64 `protobuf:"varint,12,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
+	// Configured tranche for iceberg orders; zero otherwise.
+	DisplayQuantity int64 `protobuf:"varint,13,opt,name=display_quantity,json=displayQuantity,proto3" json:"display_quantity,omitempty"`
+	// Currently executable/displayed quantity. Terminal orders expose zero.
+	VisibleQuantity     int64               `protobuf:"varint,14,opt,name=visible_quantity,json=visibleQuantity,proto3" json:"visible_quantity,omitempty"`
+	SelfTradePrevention SelfTradePrevention `protobuf:"varint,15,opt,name=self_trade_prevention,json=selfTradePrevention,proto3,enum=ordermatch.v1.SelfTradePrevention" json:"self_trade_prevention,omitempty"`
+	Dormant             bool                `protobuf:"varint,16,opt,name=dormant,proto3" json:"dormant,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Order) Reset() {
@@ -386,6 +462,48 @@ func (x *Order) GetStatus() OrderStatus {
 		return x.Status
 	}
 	return OrderStatus_ORDER_STATUS_UNSPECIFIED
+}
+
+func (x *Order) GetParticipantId() string {
+	if x != nil {
+		return x.ParticipantId
+	}
+	return ""
+}
+
+func (x *Order) GetStopPrice() int64 {
+	if x != nil {
+		return x.StopPrice
+	}
+	return 0
+}
+
+func (x *Order) GetDisplayQuantity() int64 {
+	if x != nil {
+		return x.DisplayQuantity
+	}
+	return 0
+}
+
+func (x *Order) GetVisibleQuantity() int64 {
+	if x != nil {
+		return x.VisibleQuantity
+	}
+	return 0
+}
+
+func (x *Order) GetSelfTradePrevention() SelfTradePrevention {
+	if x != nil {
+		return x.SelfTradePrevention
+	}
+	return SelfTradePrevention_SELF_TRADE_PREVENTION_NONE
+}
+
+func (x *Order) GetDormant() bool {
+	if x != nil {
+		return x.Dormant
+	}
+	return false
 }
 
 type Trade struct {
@@ -601,12 +719,13 @@ func (x *BookSnapshot) GetSymbol() string {
 }
 
 type BookDelta struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Mutation      BookMutation           `protobuf:"varint,1,opt,name=mutation,proto3,enum=ordermatch.v1.BookMutation" json:"mutation,omitempty"`
-	Order         *Order                 `protobuf:"bytes,2,opt,name=order,proto3" json:"order,omitempty"`
-	Trades        []*Trade               `protobuf:"bytes,3,rep,name=trades,proto3" json:"trades,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Mutation       BookMutation           `protobuf:"varint,1,opt,name=mutation,proto3,enum=ordermatch.v1.BookMutation" json:"mutation,omitempty"`
+	Order          *Order                 `protobuf:"bytes,2,opt,name=order,proto3" json:"order,omitempty"`
+	Trades         []*Trade               `protobuf:"bytes,3,rep,name=trades,proto3" json:"trades,omitempty"`
+	AffectedOrders []*Order               `protobuf:"bytes,4,rep,name=affected_orders,json=affectedOrders,proto3" json:"affected_orders,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *BookDelta) Reset() {
@@ -660,6 +779,13 @@ func (x *BookDelta) GetTrades() []*Trade {
 	return nil
 }
 
+func (x *BookDelta) GetAffectedOrders() []*Order {
+	if x != nil {
+		return x.AffectedOrders
+	}
+	return nil
+}
+
 type PlaceOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ClientOrderId string                 `protobuf:"bytes,1,opt,name=client_order_id,json=clientOrderId,proto3" json:"client_order_id,omitempty"`
@@ -667,12 +793,18 @@ type PlaceOrderRequest struct {
 	Side          Side                   `protobuf:"varint,3,opt,name=side,proto3,enum=ordermatch.v1.Side" json:"side,omitempty"`
 	OrderType     OrderType              `protobuf:"varint,4,opt,name=order_type,json=orderType,proto3,enum=ordermatch.v1.OrderType" json:"order_type,omitempty"`
 	TimeInForce   TimeInForce            `protobuf:"varint,5,opt,name=time_in_force,json=timeInForce,proto3,enum=ordermatch.v1.TimeInForce" json:"time_in_force,omitempty"`
-	Price         int64                  `protobuf:"varint,6,opt,name=price,proto3" json:"price,omitempty"`
-	Quantity      int64                  `protobuf:"varint,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	// Must be zero for market and stop-market orders, positive otherwise.
+	Price    int64 `protobuf:"varint,6,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity int64 `protobuf:"varint,7,opt,name=quantity,proto3" json:"quantity,omitempty"`
 	// Required. Symbols are opaque and case-sensitive.
-	Symbol        string `protobuf:"bytes,8,opt,name=symbol,proto3" json:"symbol,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Symbol string `protobuf:"bytes,8,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	// Optional. Required only when participant-scoped STP or mass cancel is desired.
+	ParticipantId       string              `protobuf:"bytes,9,opt,name=participant_id,json=participantId,proto3" json:"participant_id,omitempty"`
+	StopPrice           int64               `protobuf:"varint,10,opt,name=stop_price,json=stopPrice,proto3" json:"stop_price,omitempty"`
+	DisplayQuantity     int64               `protobuf:"varint,11,opt,name=display_quantity,json=displayQuantity,proto3" json:"display_quantity,omitempty"`
+	SelfTradePrevention SelfTradePrevention `protobuf:"varint,12,opt,name=self_trade_prevention,json=selfTradePrevention,proto3,enum=ordermatch.v1.SelfTradePrevention" json:"self_trade_prevention,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PlaceOrderRequest) Reset() {
@@ -761,13 +893,42 @@ func (x *PlaceOrderRequest) GetSymbol() string {
 	return ""
 }
 
+func (x *PlaceOrderRequest) GetParticipantId() string {
+	if x != nil {
+		return x.ParticipantId
+	}
+	return ""
+}
+
+func (x *PlaceOrderRequest) GetStopPrice() int64 {
+	if x != nil {
+		return x.StopPrice
+	}
+	return 0
+}
+
+func (x *PlaceOrderRequest) GetDisplayQuantity() int64 {
+	if x != nil {
+		return x.DisplayQuantity
+	}
+	return 0
+}
+
+func (x *PlaceOrderRequest) GetSelfTradePrevention() SelfTradePrevention {
+	if x != nil {
+		return x.SelfTradePrevention
+	}
+	return SelfTradePrevention_SELF_TRADE_PREVENTION_NONE
+}
+
 type PlaceOrderResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sequence      uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
-	Order         *Order                 `protobuf:"bytes,2,opt,name=order,proto3" json:"order,omitempty"`
-	Trades        []*Trade               `protobuf:"bytes,3,rep,name=trades,proto3" json:"trades,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Sequence       uint64                 `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Order          *Order                 `protobuf:"bytes,2,opt,name=order,proto3" json:"order,omitempty"`
+	Trades         []*Trade               `protobuf:"bytes,3,rep,name=trades,proto3" json:"trades,omitempty"`
+	AffectedOrders []*Order               `protobuf:"bytes,4,rep,name=affected_orders,json=affectedOrders,proto3" json:"affected_orders,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *PlaceOrderResponse) Reset() {
@@ -817,6 +978,13 @@ func (x *PlaceOrderResponse) GetOrder() *Order {
 func (x *PlaceOrderResponse) GetTrades() []*Trade {
 	if x != nil {
 		return x.Trades
+	}
+	return nil
+}
+
+func (x *PlaceOrderResponse) GetAffectedOrders() []*Order {
+	if x != nil {
+		return x.AffectedOrders
 	}
 	return nil
 }
@@ -925,6 +1093,181 @@ func (x *CancelOrderResponse) GetOrder() *Order {
 	return nil
 }
 
+// Empty participant_id cancels the entire symbol. Empty symbol with a non-empty
+// participant_id cancels that participant across all known symbols.
+type MassCancelRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	ParticipantId string                 `protobuf:"bytes,2,opt,name=participant_id,json=participantId,proto3" json:"participant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MassCancelRequest) Reset() {
+	*x = MassCancelRequest{}
+	mi := &file_api_v1_order_match_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MassCancelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MassCancelRequest) ProtoMessage() {}
+
+func (x *MassCancelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_order_match_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MassCancelRequest.ProtoReflect.Descriptor instead.
+func (*MassCancelRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MassCancelRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *MassCancelRequest) GetParticipantId() string {
+	if x != nil {
+		return x.ParticipantId
+	}
+	return ""
+}
+
+type SymbolMassCancelResult struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Sequence      uint64                 `protobuf:"varint,2,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Orders        []*Order               `protobuf:"bytes,3,rep,name=orders,proto3" json:"orders,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymbolMassCancelResult) Reset() {
+	*x = SymbolMassCancelResult{}
+	mi := &file_api_v1_order_match_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymbolMassCancelResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymbolMassCancelResult) ProtoMessage() {}
+
+func (x *SymbolMassCancelResult) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_order_match_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymbolMassCancelResult.ProtoReflect.Descriptor instead.
+func (*SymbolMassCancelResult) Descriptor() ([]byte, []int) {
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SymbolMassCancelResult) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *SymbolMassCancelResult) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *SymbolMassCancelResult) GetOrders() []*Order {
+	if x != nil {
+		return x.Orders
+	}
+	return nil
+}
+
+type MassCancelResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Populated for a single-symbol request for convenient backwards-compatible consumption.
+	Sequence      uint64                    `protobuf:"varint,1,opt,name=sequence,proto3" json:"sequence,omitempty"`
+	Orders        []*Order                  `protobuf:"bytes,2,rep,name=orders,proto3" json:"orders,omitempty"`
+	Results       []*SymbolMassCancelResult `protobuf:"bytes,3,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MassCancelResponse) Reset() {
+	*x = MassCancelResponse{}
+	mi := &file_api_v1_order_match_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MassCancelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MassCancelResponse) ProtoMessage() {}
+
+func (x *MassCancelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_order_match_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MassCancelResponse.ProtoReflect.Descriptor instead.
+func (*MassCancelResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MassCancelResponse) GetSequence() uint64 {
+	if x != nil {
+		return x.Sequence
+	}
+	return 0
+}
+
+func (x *MassCancelResponse) GetOrders() []*Order {
+	if x != nil {
+		return x.Orders
+	}
+	return nil
+}
+
+func (x *MassCancelResponse) GetResults() []*SymbolMassCancelResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
 type GetOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -935,7 +1278,7 @@ type GetOrderRequest struct {
 
 func (x *GetOrderRequest) Reset() {
 	*x = GetOrderRequest{}
-	mi := &file_api_v1_order_match_proto_msgTypes[9]
+	mi := &file_api_v1_order_match_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -947,7 +1290,7 @@ func (x *GetOrderRequest) String() string {
 func (*GetOrderRequest) ProtoMessage() {}
 
 func (x *GetOrderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[9]
+	mi := &file_api_v1_order_match_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -960,7 +1303,7 @@ func (x *GetOrderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrderRequest.ProtoReflect.Descriptor instead.
 func (*GetOrderRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetOrderRequest) GetOrderId() string {
@@ -987,7 +1330,7 @@ type GetOrderResponse struct {
 
 func (x *GetOrderResponse) Reset() {
 	*x = GetOrderResponse{}
-	mi := &file_api_v1_order_match_proto_msgTypes[10]
+	mi := &file_api_v1_order_match_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +1342,7 @@ func (x *GetOrderResponse) String() string {
 func (*GetOrderResponse) ProtoMessage() {}
 
 func (x *GetOrderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[10]
+	mi := &file_api_v1_order_match_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1012,7 +1355,7 @@ func (x *GetOrderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrderResponse.ProtoReflect.Descriptor instead.
 func (*GetOrderResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetOrderResponse) GetSequence() uint64 {
@@ -1038,7 +1381,7 @@ type GetBookSnapshotRequest struct {
 
 func (x *GetBookSnapshotRequest) Reset() {
 	*x = GetBookSnapshotRequest{}
-	mi := &file_api_v1_order_match_proto_msgTypes[11]
+	mi := &file_api_v1_order_match_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1050,7 +1393,7 @@ func (x *GetBookSnapshotRequest) String() string {
 func (*GetBookSnapshotRequest) ProtoMessage() {}
 
 func (x *GetBookSnapshotRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[11]
+	mi := &file_api_v1_order_match_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1063,7 +1406,7 @@ func (x *GetBookSnapshotRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBookSnapshotRequest.ProtoReflect.Descriptor instead.
 func (*GetBookSnapshotRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{11}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetBookSnapshotRequest) GetSymbol() string {
@@ -1083,7 +1426,7 @@ type GetBookSnapshotResponse struct {
 
 func (x *GetBookSnapshotResponse) Reset() {
 	*x = GetBookSnapshotResponse{}
-	mi := &file_api_v1_order_match_proto_msgTypes[12]
+	mi := &file_api_v1_order_match_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1095,7 +1438,7 @@ func (x *GetBookSnapshotResponse) String() string {
 func (*GetBookSnapshotResponse) ProtoMessage() {}
 
 func (x *GetBookSnapshotResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[12]
+	mi := &file_api_v1_order_match_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1108,7 +1451,7 @@ func (x *GetBookSnapshotResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBookSnapshotResponse.ProtoReflect.Descriptor instead.
 func (*GetBookSnapshotResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{12}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetBookSnapshotResponse) GetSequence() uint64 {
@@ -1134,7 +1477,7 @@ type StreamMarketDataRequest struct {
 
 func (x *StreamMarketDataRequest) Reset() {
 	*x = StreamMarketDataRequest{}
-	mi := &file_api_v1_order_match_proto_msgTypes[13]
+	mi := &file_api_v1_order_match_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +1489,7 @@ func (x *StreamMarketDataRequest) String() string {
 func (*StreamMarketDataRequest) ProtoMessage() {}
 
 func (x *StreamMarketDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[13]
+	mi := &file_api_v1_order_match_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +1502,7 @@ func (x *StreamMarketDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamMarketDataRequest.ProtoReflect.Descriptor instead.
 func (*StreamMarketDataRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{13}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StreamMarketDataRequest) GetSymbol() string {
@@ -1186,7 +1529,7 @@ type MarketDataUpdate struct {
 
 func (x *MarketDataUpdate) Reset() {
 	*x = MarketDataUpdate{}
-	mi := &file_api_v1_order_match_proto_msgTypes[14]
+	mi := &file_api_v1_order_match_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1198,7 +1541,7 @@ func (x *MarketDataUpdate) String() string {
 func (*MarketDataUpdate) ProtoMessage() {}
 
 func (x *MarketDataUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_order_match_proto_msgTypes[14]
+	mi := &file_api_v1_order_match_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1211,7 +1554,7 @@ func (x *MarketDataUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarketDataUpdate.ProtoReflect.Descriptor instead.
 func (*MarketDataUpdate) Descriptor() ([]byte, []int) {
-	return file_api_v1_order_match_proto_rawDescGZIP(), []int{14}
+	return file_api_v1_order_match_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MarketDataUpdate) GetSequence() uint64 {
@@ -1280,7 +1623,7 @@ var File_api_v1_order_match_proto protoreflect.FileDescriptor
 
 const file_api_v1_order_match_proto_rawDesc = "" +
 	"\n" +
-	"\x18api/v1/order_match.proto\x12\rordermatch.v1\"\xb3\x03\n" +
+	"\x18api/v1/order_match.proto\x12\rordermatch.v1\"\xc1\x05\n" +
 	"\x05Order\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12'\n" +
@@ -1293,7 +1636,14 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"\x12remaining_quantity\x18\b \x01(\x03R\x11remainingQuantity\x12+\n" +
 	"\x11executed_quantity\x18\t \x01(\x03R\x10executedQuantity\x122\n" +
 	"\x06status\x18\n" +
-	" \x01(\x0e2\x1a.ordermatch.v1.OrderStatusR\x06status\"\xbc\x01\n" +
+	" \x01(\x0e2\x1a.ordermatch.v1.OrderStatusR\x06status\x12%\n" +
+	"\x0eparticipant_id\x18\v \x01(\tR\rparticipantId\x12\x1d\n" +
+	"\n" +
+	"stop_price\x18\f \x01(\x03R\tstopPrice\x12)\n" +
+	"\x10display_quantity\x18\r \x01(\x03R\x0fdisplayQuantity\x12)\n" +
+	"\x10visible_quantity\x18\x0e \x01(\x03R\x0fvisibleQuantity\x12V\n" +
+	"\x15self_trade_prevention\x18\x0f \x01(\x0e2\".ordermatch.v1.SelfTradePreventionR\x13selfTradePrevention\x12\x18\n" +
+	"\adormant\x18\x10 \x01(\bR\adormant\"\xbc\x01\n" +
 	"\x05Trade\x12\x19\n" +
 	"\btrade_id\x18\x01 \x01(\tR\atradeId\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12$\n" +
@@ -1310,11 +1660,12 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12-\n" +
 	"\x04bids\x18\x02 \x03(\v2\x19.ordermatch.v1.PriceLevelR\x04bids\x12-\n" +
 	"\x04asks\x18\x03 \x03(\v2\x19.ordermatch.v1.PriceLevelR\x04asks\x12\x16\n" +
-	"\x06symbol\x18\x04 \x01(\tR\x06symbol\"\x9e\x01\n" +
+	"\x06symbol\x18\x04 \x01(\tR\x06symbol\"\xdd\x01\n" +
 	"\tBookDelta\x127\n" +
 	"\bmutation\x18\x01 \x01(\x0e2\x1b.ordermatch.v1.BookMutationR\bmutation\x12*\n" +
 	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\x12,\n" +
-	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"\xc2\x02\n" +
+	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\x12=\n" +
+	"\x0faffected_orders\x18\x04 \x03(\v2\x14.ordermatch.v1.OrderR\x0eaffectedOrders\"\x8b\x04\n" +
 	"\x11PlaceOrderRequest\x12&\n" +
 	"\x0fclient_order_id\x18\x01 \x01(\tR\rclientOrderId\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\tR\aorderId\x12'\n" +
@@ -1324,17 +1675,35 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"\rtime_in_force\x18\x05 \x01(\x0e2\x1a.ordermatch.v1.TimeInForceR\vtimeInForce\x12\x14\n" +
 	"\x05price\x18\x06 \x01(\x03R\x05price\x12\x1a\n" +
 	"\bquantity\x18\a \x01(\x03R\bquantity\x12\x16\n" +
-	"\x06symbol\x18\b \x01(\tR\x06symbol\"\x8a\x01\n" +
+	"\x06symbol\x18\b \x01(\tR\x06symbol\x12%\n" +
+	"\x0eparticipant_id\x18\t \x01(\tR\rparticipantId\x12\x1d\n" +
+	"\n" +
+	"stop_price\x18\n" +
+	" \x01(\x03R\tstopPrice\x12)\n" +
+	"\x10display_quantity\x18\v \x01(\x03R\x0fdisplayQuantity\x12V\n" +
+	"\x15self_trade_prevention\x18\f \x01(\x0e2\".ordermatch.v1.SelfTradePreventionR\x13selfTradePrevention\"\xc9\x01\n" +
 	"\x12PlaceOrderResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12*\n" +
 	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\x12,\n" +
-	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\"G\n" +
+	"\x06trades\x18\x03 \x03(\v2\x14.ordermatch.v1.TradeR\x06trades\x12=\n" +
+	"\x0faffected_orders\x18\x04 \x03(\v2\x14.ordermatch.v1.OrderR\x0eaffectedOrders\"G\n" +
 	"\x12CancelOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\"]\n" +
 	"\x13CancelOrderResponse\x12\x1a\n" +
 	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12*\n" +
-	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\"D\n" +
+	"\x05order\x18\x02 \x01(\v2\x14.ordermatch.v1.OrderR\x05order\"R\n" +
+	"\x11MassCancelRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12%\n" +
+	"\x0eparticipant_id\x18\x02 \x01(\tR\rparticipantId\"z\n" +
+	"\x16SymbolMassCancelResult\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1a\n" +
+	"\bsequence\x18\x02 \x01(\x04R\bsequence\x12,\n" +
+	"\x06orders\x18\x03 \x03(\v2\x14.ordermatch.v1.OrderR\x06orders\"\x9f\x01\n" +
+	"\x12MassCancelResponse\x12\x1a\n" +
+	"\bsequence\x18\x01 \x01(\x04R\bsequence\x12,\n" +
+	"\x06orders\x18\x02 \x03(\v2\x14.ordermatch.v1.OrderR\x06orders\x12?\n" +
+	"\aresults\x18\x03 \x03(\v2%.ordermatch.v1.SymbolMassCancelResultR\aresults\"D\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\"Z\n" +
@@ -1358,10 +1727,19 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"\x04Side\x12\x14\n" +
 	"\x10SIDE_UNSPECIFIED\x10\x00\x12\f\n" +
 	"\bSIDE_BUY\x10\x01\x12\r\n" +
-	"\tSIDE_SELL\x10\x02*=\n" +
+	"\tSIDE_SELL\x10\x02*\xa3\x01\n" +
 	"\tOrderType\x12\x1a\n" +
 	"\x16ORDER_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
-	"\x10ORDER_TYPE_LIMIT\x10\x01*q\n" +
+	"\x10ORDER_TYPE_LIMIT\x10\x01\x12\x15\n" +
+	"\x11ORDER_TYPE_MARKET\x10\x02\x12\x1a\n" +
+	"\x16ORDER_TYPE_STOP_MARKET\x10\x03\x12\x19\n" +
+	"\x15ORDER_TYPE_STOP_LIMIT\x10\x04\x12\x16\n" +
+	"\x12ORDER_TYPE_ICEBERG\x10\x05*\xb2\x01\n" +
+	"\x13SelfTradePrevention\x12\x1e\n" +
+	"\x1aSELF_TRADE_PREVENTION_NONE\x10\x00\x12*\n" +
+	"&SELF_TRADE_PREVENTION_CANCEL_AGGRESSOR\x10\x01\x12(\n" +
+	"$SELF_TRADE_PREVENTION_CANCEL_RESTING\x10\x02\x12%\n" +
+	"!SELF_TRADE_PREVENTION_CANCEL_BOTH\x10\x03*q\n" +
 	"\vTimeInForce\x12\x1d\n" +
 	"\x19TIME_IN_FORCE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TIME_IN_FORCE_GTC\x10\x01\x12\x15\n" +
@@ -1372,15 +1750,18 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"\x11ORDER_STATUS_OPEN\x10\x01\x12!\n" +
 	"\x1dORDER_STATUS_PARTIALLY_FILLED\x10\x02\x12\x17\n" +
 	"\x13ORDER_STATUS_FILLED\x10\x03\x12\x19\n" +
-	"\x15ORDER_STATUS_CANCELED\x10\x04*q\n" +
+	"\x15ORDER_STATUS_CANCELED\x10\x04*\x92\x01\n" +
 	"\fBookMutation\x12\x1d\n" +
 	"\x19BOOK_MUTATION_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cBOOK_MUTATION_ORDER_ACCEPTED\x10\x01\x12 \n" +
-	"\x1cBOOK_MUTATION_ORDER_CANCELED\x10\x022\xca\x03\n" +
+	"\x1cBOOK_MUTATION_ORDER_CANCELED\x10\x02\x12\x1f\n" +
+	"\x1bBOOK_MUTATION_MASS_CANCELED\x10\x032\x9d\x04\n" +
 	"\x11OrderMatchService\x12Q\n" +
 	"\n" +
 	"PlaceOrder\x12 .ordermatch.v1.PlaceOrderRequest\x1a!.ordermatch.v1.PlaceOrderResponse\x12T\n" +
-	"\vCancelOrder\x12!.ordermatch.v1.CancelOrderRequest\x1a\".ordermatch.v1.CancelOrderResponse\x12K\n" +
+	"\vCancelOrder\x12!.ordermatch.v1.CancelOrderRequest\x1a\".ordermatch.v1.CancelOrderResponse\x12Q\n" +
+	"\n" +
+	"MassCancel\x12 .ordermatch.v1.MassCancelRequest\x1a!.ordermatch.v1.MassCancelResponse\x12K\n" +
 	"\bGetOrder\x12\x1e.ordermatch.v1.GetOrderRequest\x1a\x1f.ordermatch.v1.GetOrderResponse\x12`\n" +
 	"\x0fGetBookSnapshot\x12%.ordermatch.v1.GetBookSnapshotRequest\x1a&.ordermatch.v1.GetBookSnapshotResponse\x12]\n" +
 	"\x10StreamMarketData\x12&.ordermatch.v1.StreamMarketDataRequest\x1a\x1f.ordermatch.v1.MarketDataUpdate0\x01B@Z>github.com/lucasbraun96/order-match-engine/api/v1;ordermatchv1b\x06proto3"
@@ -1397,66 +1778,79 @@ func file_api_v1_order_match_proto_rawDescGZIP() []byte {
 	return file_api_v1_order_match_proto_rawDescData
 }
 
-var file_api_v1_order_match_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_api_v1_order_match_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_api_v1_order_match_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
+var file_api_v1_order_match_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_api_v1_order_match_proto_goTypes = []any{
 	(Side)(0),                       // 0: ordermatch.v1.Side
 	(OrderType)(0),                  // 1: ordermatch.v1.OrderType
-	(TimeInForce)(0),                // 2: ordermatch.v1.TimeInForce
-	(OrderStatus)(0),                // 3: ordermatch.v1.OrderStatus
-	(BookMutation)(0),               // 4: ordermatch.v1.BookMutation
-	(*Order)(nil),                   // 5: ordermatch.v1.Order
-	(*Trade)(nil),                   // 6: ordermatch.v1.Trade
-	(*PriceLevel)(nil),              // 7: ordermatch.v1.PriceLevel
-	(*BookSnapshot)(nil),            // 8: ordermatch.v1.BookSnapshot
-	(*BookDelta)(nil),               // 9: ordermatch.v1.BookDelta
-	(*PlaceOrderRequest)(nil),       // 10: ordermatch.v1.PlaceOrderRequest
-	(*PlaceOrderResponse)(nil),      // 11: ordermatch.v1.PlaceOrderResponse
-	(*CancelOrderRequest)(nil),      // 12: ordermatch.v1.CancelOrderRequest
-	(*CancelOrderResponse)(nil),     // 13: ordermatch.v1.CancelOrderResponse
-	(*GetOrderRequest)(nil),         // 14: ordermatch.v1.GetOrderRequest
-	(*GetOrderResponse)(nil),        // 15: ordermatch.v1.GetOrderResponse
-	(*GetBookSnapshotRequest)(nil),  // 16: ordermatch.v1.GetBookSnapshotRequest
-	(*GetBookSnapshotResponse)(nil), // 17: ordermatch.v1.GetBookSnapshotResponse
-	(*StreamMarketDataRequest)(nil), // 18: ordermatch.v1.StreamMarketDataRequest
-	(*MarketDataUpdate)(nil),        // 19: ordermatch.v1.MarketDataUpdate
+	(SelfTradePrevention)(0),        // 2: ordermatch.v1.SelfTradePrevention
+	(TimeInForce)(0),                // 3: ordermatch.v1.TimeInForce
+	(OrderStatus)(0),                // 4: ordermatch.v1.OrderStatus
+	(BookMutation)(0),               // 5: ordermatch.v1.BookMutation
+	(*Order)(nil),                   // 6: ordermatch.v1.Order
+	(*Trade)(nil),                   // 7: ordermatch.v1.Trade
+	(*PriceLevel)(nil),              // 8: ordermatch.v1.PriceLevel
+	(*BookSnapshot)(nil),            // 9: ordermatch.v1.BookSnapshot
+	(*BookDelta)(nil),               // 10: ordermatch.v1.BookDelta
+	(*PlaceOrderRequest)(nil),       // 11: ordermatch.v1.PlaceOrderRequest
+	(*PlaceOrderResponse)(nil),      // 12: ordermatch.v1.PlaceOrderResponse
+	(*CancelOrderRequest)(nil),      // 13: ordermatch.v1.CancelOrderRequest
+	(*CancelOrderResponse)(nil),     // 14: ordermatch.v1.CancelOrderResponse
+	(*MassCancelRequest)(nil),       // 15: ordermatch.v1.MassCancelRequest
+	(*SymbolMassCancelResult)(nil),  // 16: ordermatch.v1.SymbolMassCancelResult
+	(*MassCancelResponse)(nil),      // 17: ordermatch.v1.MassCancelResponse
+	(*GetOrderRequest)(nil),         // 18: ordermatch.v1.GetOrderRequest
+	(*GetOrderResponse)(nil),        // 19: ordermatch.v1.GetOrderResponse
+	(*GetBookSnapshotRequest)(nil),  // 20: ordermatch.v1.GetBookSnapshotRequest
+	(*GetBookSnapshotResponse)(nil), // 21: ordermatch.v1.GetBookSnapshotResponse
+	(*StreamMarketDataRequest)(nil), // 22: ordermatch.v1.StreamMarketDataRequest
+	(*MarketDataUpdate)(nil),        // 23: ordermatch.v1.MarketDataUpdate
 }
 var file_api_v1_order_match_proto_depIdxs = []int32{
 	0,  // 0: ordermatch.v1.Order.side:type_name -> ordermatch.v1.Side
 	1,  // 1: ordermatch.v1.Order.order_type:type_name -> ordermatch.v1.OrderType
-	2,  // 2: ordermatch.v1.Order.time_in_force:type_name -> ordermatch.v1.TimeInForce
-	3,  // 3: ordermatch.v1.Order.status:type_name -> ordermatch.v1.OrderStatus
-	5,  // 4: ordermatch.v1.PriceLevel.orders:type_name -> ordermatch.v1.Order
-	7,  // 5: ordermatch.v1.BookSnapshot.bids:type_name -> ordermatch.v1.PriceLevel
-	7,  // 6: ordermatch.v1.BookSnapshot.asks:type_name -> ordermatch.v1.PriceLevel
-	4,  // 7: ordermatch.v1.BookDelta.mutation:type_name -> ordermatch.v1.BookMutation
-	5,  // 8: ordermatch.v1.BookDelta.order:type_name -> ordermatch.v1.Order
-	6,  // 9: ordermatch.v1.BookDelta.trades:type_name -> ordermatch.v1.Trade
-	0,  // 10: ordermatch.v1.PlaceOrderRequest.side:type_name -> ordermatch.v1.Side
-	1,  // 11: ordermatch.v1.PlaceOrderRequest.order_type:type_name -> ordermatch.v1.OrderType
-	2,  // 12: ordermatch.v1.PlaceOrderRequest.time_in_force:type_name -> ordermatch.v1.TimeInForce
-	5,  // 13: ordermatch.v1.PlaceOrderResponse.order:type_name -> ordermatch.v1.Order
-	6,  // 14: ordermatch.v1.PlaceOrderResponse.trades:type_name -> ordermatch.v1.Trade
-	5,  // 15: ordermatch.v1.CancelOrderResponse.order:type_name -> ordermatch.v1.Order
-	5,  // 16: ordermatch.v1.GetOrderResponse.order:type_name -> ordermatch.v1.Order
-	8,  // 17: ordermatch.v1.GetBookSnapshotResponse.snapshot:type_name -> ordermatch.v1.BookSnapshot
-	8,  // 18: ordermatch.v1.MarketDataUpdate.snapshot:type_name -> ordermatch.v1.BookSnapshot
-	9,  // 19: ordermatch.v1.MarketDataUpdate.delta:type_name -> ordermatch.v1.BookDelta
-	10, // 20: ordermatch.v1.OrderMatchService.PlaceOrder:input_type -> ordermatch.v1.PlaceOrderRequest
-	12, // 21: ordermatch.v1.OrderMatchService.CancelOrder:input_type -> ordermatch.v1.CancelOrderRequest
-	14, // 22: ordermatch.v1.OrderMatchService.GetOrder:input_type -> ordermatch.v1.GetOrderRequest
-	16, // 23: ordermatch.v1.OrderMatchService.GetBookSnapshot:input_type -> ordermatch.v1.GetBookSnapshotRequest
-	18, // 24: ordermatch.v1.OrderMatchService.StreamMarketData:input_type -> ordermatch.v1.StreamMarketDataRequest
-	11, // 25: ordermatch.v1.OrderMatchService.PlaceOrder:output_type -> ordermatch.v1.PlaceOrderResponse
-	13, // 26: ordermatch.v1.OrderMatchService.CancelOrder:output_type -> ordermatch.v1.CancelOrderResponse
-	15, // 27: ordermatch.v1.OrderMatchService.GetOrder:output_type -> ordermatch.v1.GetOrderResponse
-	17, // 28: ordermatch.v1.OrderMatchService.GetBookSnapshot:output_type -> ordermatch.v1.GetBookSnapshotResponse
-	19, // 29: ordermatch.v1.OrderMatchService.StreamMarketData:output_type -> ordermatch.v1.MarketDataUpdate
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	3,  // 2: ordermatch.v1.Order.time_in_force:type_name -> ordermatch.v1.TimeInForce
+	4,  // 3: ordermatch.v1.Order.status:type_name -> ordermatch.v1.OrderStatus
+	2,  // 4: ordermatch.v1.Order.self_trade_prevention:type_name -> ordermatch.v1.SelfTradePrevention
+	6,  // 5: ordermatch.v1.PriceLevel.orders:type_name -> ordermatch.v1.Order
+	8,  // 6: ordermatch.v1.BookSnapshot.bids:type_name -> ordermatch.v1.PriceLevel
+	8,  // 7: ordermatch.v1.BookSnapshot.asks:type_name -> ordermatch.v1.PriceLevel
+	5,  // 8: ordermatch.v1.BookDelta.mutation:type_name -> ordermatch.v1.BookMutation
+	6,  // 9: ordermatch.v1.BookDelta.order:type_name -> ordermatch.v1.Order
+	7,  // 10: ordermatch.v1.BookDelta.trades:type_name -> ordermatch.v1.Trade
+	6,  // 11: ordermatch.v1.BookDelta.affected_orders:type_name -> ordermatch.v1.Order
+	0,  // 12: ordermatch.v1.PlaceOrderRequest.side:type_name -> ordermatch.v1.Side
+	1,  // 13: ordermatch.v1.PlaceOrderRequest.order_type:type_name -> ordermatch.v1.OrderType
+	3,  // 14: ordermatch.v1.PlaceOrderRequest.time_in_force:type_name -> ordermatch.v1.TimeInForce
+	2,  // 15: ordermatch.v1.PlaceOrderRequest.self_trade_prevention:type_name -> ordermatch.v1.SelfTradePrevention
+	6,  // 16: ordermatch.v1.PlaceOrderResponse.order:type_name -> ordermatch.v1.Order
+	7,  // 17: ordermatch.v1.PlaceOrderResponse.trades:type_name -> ordermatch.v1.Trade
+	6,  // 18: ordermatch.v1.PlaceOrderResponse.affected_orders:type_name -> ordermatch.v1.Order
+	6,  // 19: ordermatch.v1.CancelOrderResponse.order:type_name -> ordermatch.v1.Order
+	6,  // 20: ordermatch.v1.SymbolMassCancelResult.orders:type_name -> ordermatch.v1.Order
+	6,  // 21: ordermatch.v1.MassCancelResponse.orders:type_name -> ordermatch.v1.Order
+	16, // 22: ordermatch.v1.MassCancelResponse.results:type_name -> ordermatch.v1.SymbolMassCancelResult
+	6,  // 23: ordermatch.v1.GetOrderResponse.order:type_name -> ordermatch.v1.Order
+	9,  // 24: ordermatch.v1.GetBookSnapshotResponse.snapshot:type_name -> ordermatch.v1.BookSnapshot
+	9,  // 25: ordermatch.v1.MarketDataUpdate.snapshot:type_name -> ordermatch.v1.BookSnapshot
+	10, // 26: ordermatch.v1.MarketDataUpdate.delta:type_name -> ordermatch.v1.BookDelta
+	11, // 27: ordermatch.v1.OrderMatchService.PlaceOrder:input_type -> ordermatch.v1.PlaceOrderRequest
+	13, // 28: ordermatch.v1.OrderMatchService.CancelOrder:input_type -> ordermatch.v1.CancelOrderRequest
+	15, // 29: ordermatch.v1.OrderMatchService.MassCancel:input_type -> ordermatch.v1.MassCancelRequest
+	18, // 30: ordermatch.v1.OrderMatchService.GetOrder:input_type -> ordermatch.v1.GetOrderRequest
+	20, // 31: ordermatch.v1.OrderMatchService.GetBookSnapshot:input_type -> ordermatch.v1.GetBookSnapshotRequest
+	22, // 32: ordermatch.v1.OrderMatchService.StreamMarketData:input_type -> ordermatch.v1.StreamMarketDataRequest
+	12, // 33: ordermatch.v1.OrderMatchService.PlaceOrder:output_type -> ordermatch.v1.PlaceOrderResponse
+	14, // 34: ordermatch.v1.OrderMatchService.CancelOrder:output_type -> ordermatch.v1.CancelOrderResponse
+	17, // 35: ordermatch.v1.OrderMatchService.MassCancel:output_type -> ordermatch.v1.MassCancelResponse
+	19, // 36: ordermatch.v1.OrderMatchService.GetOrder:output_type -> ordermatch.v1.GetOrderResponse
+	21, // 37: ordermatch.v1.OrderMatchService.GetBookSnapshot:output_type -> ordermatch.v1.GetBookSnapshotResponse
+	23, // 38: ordermatch.v1.OrderMatchService.StreamMarketData:output_type -> ordermatch.v1.MarketDataUpdate
+	33, // [33:39] is the sub-list for method output_type
+	27, // [27:33] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_order_match_proto_init() }
@@ -1464,7 +1858,7 @@ func file_api_v1_order_match_proto_init() {
 	if File_api_v1_order_match_proto != nil {
 		return
 	}
-	file_api_v1_order_match_proto_msgTypes[14].OneofWrappers = []any{
+	file_api_v1_order_match_proto_msgTypes[17].OneofWrappers = []any{
 		(*MarketDataUpdate_Snapshot)(nil),
 		(*MarketDataUpdate_Delta)(nil),
 	}
@@ -1473,8 +1867,8 @@ func file_api_v1_order_match_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_order_match_proto_rawDesc), len(file_api_v1_order_match_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   15,
+			NumEnums:      6,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

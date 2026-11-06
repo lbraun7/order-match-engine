@@ -97,6 +97,14 @@ func (r *Router) CancelOrder(ctx context.Context, symbol domain.Symbol, command 
 	return e.CancelOrder(ctx, command)
 }
 
+func (r *Router) MassCancel(ctx context.Context, symbol domain.Symbol, command domain.MassCancel) (MassCancelResult, error) {
+	e, err := r.engine(symbol)
+	if err != nil {
+		return MassCancelResult{}, err
+	}
+	return e.MassCancel(ctx, command)
+}
+
 func (r *Router) GetOrder(ctx context.Context, symbol domain.Symbol, id domain.OrderID) (OrderSnapshot, error) {
 	e, err := r.engine(symbol)
 	if err != nil {

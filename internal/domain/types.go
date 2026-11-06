@@ -3,9 +3,10 @@ package domain
 // IDs are strings because their allocation strategy belongs to the engine or
 // its caller, not to the domain model.
 type (
-	Symbol  string
-	OrderID string
-	TradeID string
+	Symbol        string
+	OrderID       string
+	TradeID       string
+	ParticipantID string
 )
 
 // Numeric matching values are integers to avoid floating-point rounding.
@@ -34,6 +35,13 @@ func (id OrderID) Validate() error {
 func (id TradeID) Validate() error {
 	if id == "" {
 		return ErrInvalidTradeID
+	}
+	return nil
+}
+
+func (id ParticipantID) Validate() error {
+	if id == "" {
+		return ErrInvalidParticipantID
 	}
 	return nil
 }

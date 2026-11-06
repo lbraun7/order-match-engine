@@ -20,8 +20,14 @@ var (
 
 // PlaceOrderResult is an immutable result of processing a place command.
 type PlaceOrderResult struct {
-	Order  OrderSnapshot
-	Trades []domain.Trade
+	Order          OrderSnapshot
+	Trades         []domain.Trade
+	AffectedOrders []OrderSnapshot
+}
+
+type MassCancelResult struct {
+	Sequence domain.Sequence
+	Orders   []OrderSnapshot
 }
 
 // request is the queue envelope. The buffered result channel lets the engine
@@ -63,7 +69,7 @@ type Engine struct {
 	stateMu   sync.RWMutex
 	accepting bool
 
-	log              *eventlog.Log
+	log              eventlog.Writer
 	snapshotPath     string
 	snapshotInterval uint64
 	logEvents        uint64
@@ -73,6 +79,7 @@ type Engine struct {
 // SnapshotInterval zero disables snapshots while retaining the event log.
 type PersistenceConfig struct {
 	LogPath          string
+	ReplicaLogPath   string
 	SnapshotPath     string
 	SnapshotInterval uint64
 }
@@ -93,7 +100,13 @@ func NewPersistentEngine(queueCapacity int, config PersistenceConfig) (*Engine, 
 	if config.LogPath == "" {
 		return nil, errors.New("event log path is required")
 	}
-	log, err := eventlog.Open(config.LogPath)
+	var log eventlog.Writer
+	var err error
+	if config.ReplicaLogPath != "" {
+		log, err = eventlog.OpenReplicated(config.LogPath, config.ReplicaLogPath)
+	} else {
+		log, err = eventlog.Open(config.LogPath)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +156,7 @@ func NewPersistentEngine(queueCapacity int, config PersistenceConfig) (*Engine, 
 	return engine, nil
 }
 
-func newEngine(queueCapacity int, log *eventlog.Log, book *OrderBook) (*Engine, error) {
+func newEngine(queueCapacity int, log eventlog.Writer, book *OrderBook) (*Engine, error) {
 	if queueCapacity <= 0 {
 		return nil, fmt.Errorf("%d: %w", queueCapacity, ErrInvalidQueueCapacity)
 	}
@@ -175,6 +188,14 @@ func (e *Engine) CancelOrder(ctx context.Context, command domain.CancelOrder) (O
 		return OrderSnapshot{}, err
 	}
 	return value.(OrderSnapshot), nil
+}
+
+func (e *Engine) MassCancel(ctx context.Context, command domain.MassCancel) (MassCancelResult, error) {
+	value, err := e.submit(ctx, command)
+	if err != nil {
+		return MassCancelResult{}, err
+	}
+	return value.(MassCancelResult), nil
 }
 
 // GetOrder returns an immutable order copy produced by the single writer.
@@ -293,10 +314,10 @@ func (e *Engine) process(book *OrderBook, req request) {
 			result.err = err
 			break
 		}
-		order, trades, err := book.PlaceOrder(command)
+		placement, err := book.PlaceOrderDetailed(command)
 		result.err = err
 		if err == nil {
-			result.value = PlaceOrderResult{Order: snapshotOrder(order), Trades: trades}
+			result.value = PlaceOrderResult{Order: book.snapshotOrder(placement.Order), Trades: placement.Trades, AffectedOrders: placement.Affected}
 		}
 	case domain.CancelOrder:
 		if err := book.canCancel(command); err != nil {
@@ -308,6 +329,16 @@ func (e *Engine) process(book *OrderBook, req request) {
 			break
 		}
 		result.value, result.err = book.CancelOrder(command)
+	case domain.MassCancel:
+		if err := e.persist(book, eventlog.TypeMassCancel, command); err != nil {
+			result.err = err
+			break
+		}
+		orders, err := book.MassCancel(command)
+		result.err = err
+		if err == nil {
+			result.value = MassCancelResult{Sequence: book.nextSequence, Orders: orders}
+		}
 	case getOrderCommand:
 		result.value, result.err = book.GetOrder(command.id)
 	case snapshotCommand:
@@ -374,6 +405,13 @@ func replayEvent(book *OrderBook, event eventlog.Event) error {
 			return err
 		}
 		_, err := book.CancelOrder(command)
+		return err
+	case eventlog.TypeMassCancel:
+		var command domain.MassCancel
+		if err := json.Unmarshal(event.Payload, &command); err != nil {
+			return err
+		}
+		_, err := book.MassCancel(command)
 		return err
 	default:
 		return fmt.Errorf("unknown event type %d", event.Type)

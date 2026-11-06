@@ -20,13 +20,19 @@ type OrderType uint8
 const (
 	OrderTypeUnknown OrderType = iota
 	OrderTypeLimit
+	OrderTypeMarket
+	OrderTypeStopMarket
+	OrderTypeStopLimit
+	OrderTypeIceberg
 )
 
 func (t OrderType) Validate() error {
-	if t != OrderTypeLimit {
+	switch t {
+	case OrderTypeLimit, OrderTypeMarket, OrderTypeStopMarket, OrderTypeStopLimit, OrderTypeIceberg:
+		return nil
+	default:
 		return ErrInvalidOrderType
 	}
-	return nil
 }
 
 type OrderStatus uint8
@@ -63,5 +69,24 @@ func (t TimeInForce) Validate() error {
 		return nil
 	default:
 		return ErrInvalidTimeInForce
+	}
+}
+
+type SelfTradePrevention uint8
+
+const (
+	SelfTradePreventionNone SelfTradePrevention = iota
+	SelfTradePreventionCancelAggressor
+	SelfTradePreventionCancelResting
+	SelfTradePreventionCancelBoth
+)
+
+func (s SelfTradePrevention) Validate() error {
+	switch s {
+	case SelfTradePreventionNone, SelfTradePreventionCancelAggressor,
+		SelfTradePreventionCancelResting, SelfTradePreventionCancelBoth:
+		return nil
+	default:
+		return ErrInvalidSelfTradePrevention
 	}
 }

@@ -178,28 +178,12 @@ func reduce(book *engine.OrderBook, logged eventlog.Event) (Event, error) {
 		if err := json.Unmarshal(logged.Payload, &command); err != nil {
 			return Event{}, err
 		}
-		order, trades, err := book.PlaceOrder(command)
+		placement, err := book.PlaceOrderDetailed(command)
 		if err != nil {
 			return Event{}, err
 		}
-		current, err := book.GetOrder(order.ID())
-		if err != nil {
-			return Event{}, err
-		}
-		projected.Orders = append(projected.Orders, current)
-		projected.Trades = trades
-		seen := map[domain.OrderID]bool{order.ID(): true}
-		for _, trade := range trades {
-			if seen[trade.MakerOrderID()] {
-				continue
-			}
-			maker, err := book.GetOrder(trade.MakerOrderID())
-			if err != nil {
-				return Event{}, err
-			}
-			projected.Orders = append(projected.Orders, maker)
-			seen[trade.MakerOrderID()] = true
-		}
+		projected.Orders = placement.Affected
+		projected.Trades = placement.Trades
 	case eventlog.TypeCancel:
 		var command domain.CancelOrder
 		if err := json.Unmarshal(logged.Payload, &command); err != nil {
@@ -210,6 +194,16 @@ func reduce(book *engine.OrderBook, logged eventlog.Event) (Event, error) {
 			return Event{}, err
 		}
 		projected.Orders = append(projected.Orders, order)
+	case eventlog.TypeMassCancel:
+		var command domain.MassCancel
+		if err := json.Unmarshal(logged.Payload, &command); err != nil {
+			return Event{}, err
+		}
+		orders, err := book.MassCancel(command)
+		if err != nil {
+			return Event{}, err
+		}
+		projected.Orders = orders
 	default:
 		return Event{}, fmt.Errorf("unknown event type %d", logged.Type)
 	}

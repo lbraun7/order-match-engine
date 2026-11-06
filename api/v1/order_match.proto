@@ -7,6 +7,7 @@ option go_package = "github.com/lucasbraun96/order-match-engine/api/v1;ordermatc
 service OrderMatchService {
   rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+  rpc MassCancel(MassCancelRequest) returns (MassCancelResponse);
   rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
   rpc GetBookSnapshot(GetBookSnapshotRequest) returns (GetBookSnapshotResponse);
   rpc StreamMarketData(StreamMarketDataRequest) returns (stream MarketDataUpdate);
@@ -21,6 +22,17 @@ enum Side {
 enum OrderType {
   ORDER_TYPE_UNSPECIFIED = 0;
   ORDER_TYPE_LIMIT = 1;
+  ORDER_TYPE_MARKET = 2;
+  ORDER_TYPE_STOP_MARKET = 3;
+  ORDER_TYPE_STOP_LIMIT = 4;
+  ORDER_TYPE_ICEBERG = 5;
+}
+
+enum SelfTradePrevention {
+  SELF_TRADE_PREVENTION_NONE = 0;
+  SELF_TRADE_PREVENTION_CANCEL_AGGRESSOR = 1;
+  SELF_TRADE_PREVENTION_CANCEL_RESTING = 2;
+  SELF_TRADE_PREVENTION_CANCEL_BOTH = 3;
 }
 
 enum TimeInForce {
@@ -42,6 +54,7 @@ enum BookMutation {
   BOOK_MUTATION_UNSPECIFIED = 0;
   BOOK_MUTATION_ORDER_ACCEPTED = 1;
   BOOK_MUTATION_ORDER_CANCELED = 2;
+  BOOK_MUTATION_MASS_CANCELED = 3;
 }
 
 message Order {
@@ -55,6 +68,15 @@ message Order {
   int64 remaining_quantity = 8;
   int64 executed_quantity = 9;
   OrderStatus status = 10;
+  string participant_id = 11;
+  // Trigger for stop orders; zero for all other types.
+  int64 stop_price = 12;
+  // Configured tranche for iceberg orders; zero otherwise.
+  int64 display_quantity = 13;
+  // Currently executable/displayed quantity. Terminal orders expose zero.
+  int64 visible_quantity = 14;
+  SelfTradePrevention self_trade_prevention = 15;
+  bool dormant = 16;
 }
 
 message Trade {
@@ -83,6 +105,7 @@ message BookDelta {
   BookMutation mutation = 1;
   Order order = 2;
   repeated Trade trades = 3;
+  repeated Order affected_orders = 4;
 }
 
 message PlaceOrderRequest {
@@ -91,20 +114,37 @@ message PlaceOrderRequest {
   Side side = 3;
   OrderType order_type = 4;
   TimeInForce time_in_force = 5;
+  // Must be zero for market and stop-market orders, positive otherwise.
   int64 price = 6;
   int64 quantity = 7;
   // Required. Symbols are opaque and case-sensitive.
   string symbol = 8;
+  // Optional. Required only when participant-scoped STP or mass cancel is desired.
+  string participant_id = 9;
+  int64 stop_price = 10;
+  int64 display_quantity = 11;
+  SelfTradePrevention self_trade_prevention = 12;
 }
 
 message PlaceOrderResponse {
   uint64 sequence = 1;
   Order order = 2;
   repeated Trade trades = 3;
+  repeated Order affected_orders = 4;
 }
 
 message CancelOrderRequest { string order_id = 1; string symbol = 2; }
 message CancelOrderResponse { uint64 sequence = 1; Order order = 2; }
+// Empty participant_id cancels the entire symbol. Empty symbol with a non-empty
+// participant_id cancels that participant across all known symbols.
+message MassCancelRequest { string symbol = 1; string participant_id = 2; }
+message SymbolMassCancelResult { string symbol = 1; uint64 sequence = 2; repeated Order orders = 3; }
+message MassCancelResponse {
+  // Populated for a single-symbol request for convenient backwards-compatible consumption.
+  uint64 sequence = 1;
+  repeated Order orders = 2;
+  repeated SymbolMassCancelResult results = 3;
+}
 message GetOrderRequest { string order_id = 1; string symbol = 2; }
 message GetOrderResponse { uint64 sequence = 1; Order order = 2; }
 message GetBookSnapshotRequest { string symbol = 1; }

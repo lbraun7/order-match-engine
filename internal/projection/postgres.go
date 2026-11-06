@@ -77,27 +77,33 @@ func (s *postgresSymbolStore) Apply(ctx context.Context, event Event) error {
 	for _, order := range event.Orders {
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO orders (
-				symbol, order_id, order_sequence, side, order_type, time_in_force, price,
-				original_quantity, remaining_quantity, executed_quantity, status, updated_event_sequence
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+				symbol, order_id, order_sequence, participant_id, side, order_type, time_in_force, price,
+				original_quantity, remaining_quantity, executed_quantity, status, stop_price, display_quantity,
+				visible_quantity, self_trade_prevention, dormant, updated_event_sequence
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 			ON CONFLICT (symbol, order_id) DO UPDATE SET
 				remaining_quantity = EXCLUDED.remaining_quantity,
 				executed_quantity = EXCLUDED.executed_quantity,
 				status = EXCLUDED.status,
+				visible_quantity = EXCLUDED.visible_quantity,
+				dormant = EXCLUDED.dormant,
 				updated_event_sequence = EXCLUDED.updated_event_sequence`,
-			s.symbol, order.ID, order.Sequence, order.Side, order.Type, order.TimeInForce, order.Price,
-			order.OriginalQuantity, order.RemainingQuantity, order.ExecutedQuantity, order.Status, event.EventSequence)
+			s.symbol, order.ID, order.Sequence, order.ParticipantID, order.Side, order.Type, order.TimeInForce, order.Price,
+			order.OriginalQuantity, order.RemainingQuantity, order.ExecutedQuantity, order.Status, order.StopPrice,
+			order.DisplayQuantity, order.VisibleQuantity, order.SelfTradePrevention, order.Dormant, event.EventSequence)
 		if err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO order_history (
-				symbol, event_sequence, order_id, order_sequence, side, order_type, time_in_force,
-				price, original_quantity, remaining_quantity, executed_quantity, status
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+				symbol, event_sequence, order_id, order_sequence, participant_id, side, order_type, time_in_force,
+				price, original_quantity, remaining_quantity, executed_quantity, status, stop_price, display_quantity,
+				visible_quantity, self_trade_prevention, dormant
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 			ON CONFLICT (symbol, event_sequence, order_id) DO NOTHING`,
-			s.symbol, event.EventSequence, order.ID, order.Sequence, order.Side, order.Type, order.TimeInForce,
-			order.Price, order.OriginalQuantity, order.RemainingQuantity, order.ExecutedQuantity, order.Status)
+			s.symbol, event.EventSequence, order.ID, order.Sequence, order.ParticipantID, order.Side, order.Type, order.TimeInForce,
+			order.Price, order.OriginalQuantity, order.RemainingQuantity, order.ExecutedQuantity, order.Status,
+			order.StopPrice, order.DisplayQuantity, order.VisibleQuantity, order.SelfTradePrevention, order.Dormant)
 		if err != nil {
 			return err
 		}
