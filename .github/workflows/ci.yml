@@ -10,6 +10,20 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: order_match
+          POSTGRES_USER: order_match
+          POSTGRES_PASSWORD: order_match
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U order_match -d order_match"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,11 +36,24 @@ jobs:
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
 
+      - name: Apply Postgres migrations
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" \
+            psql -v ON_ERROR_STOP=1 -U order_match -d order_match \
+            < migrations/000001_projections.up.sql
+          docker exec -i "${{ job.services.postgres.id }}" \
+            psql -v ON_ERROR_STOP=1 -U order_match -d order_match \
+            < migrations/000002_advanced_orders.up.sql
+
       - name: Test
+        env:
+          TEST_DATABASE_URL: postgres://order_match:order_match@localhost:5432/order_match?sslmode=disable
         run: go test ./...
 
       - name: Vet
         run: go vet ./...
 
       - name: Test with race detector
+        env:
+          TEST_DATABASE_URL: postgres://order_match:order_match@localhost:5432/order_match?sslmode=disable
         run: go test -race ./...
