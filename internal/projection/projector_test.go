@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
-	"github.com/lucasbraun96/order-match-engine/internal/engine"
-	"github.com/lucasbraun96/order-match-engine/internal/eventlog"
+	"github.com/lbraun7/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/engine"
+	"github.com/lbraun7/order-match-engine/internal/eventlog"
 )
 
 type memoryStore struct {

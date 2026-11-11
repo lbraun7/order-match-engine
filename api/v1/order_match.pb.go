@@ -1764,7 +1764,7 @@ const file_api_v1_order_match_proto_rawDesc = "" +
 	"MassCancel\x12 .ordermatch.v1.MassCancelRequest\x1a!.ordermatch.v1.MassCancelResponse\x12K\n" +
 	"\bGetOrder\x12\x1e.ordermatch.v1.GetOrderRequest\x1a\x1f.ordermatch.v1.GetOrderResponse\x12`\n" +
 	"\x0fGetBookSnapshot\x12%.ordermatch.v1.GetBookSnapshotRequest\x1a&.ordermatch.v1.GetBookSnapshotResponse\x12]\n" +
-	"\x10StreamMarketData\x12&.ordermatch.v1.StreamMarketDataRequest\x1a\x1f.ordermatch.v1.MarketDataUpdate0\x01B@Z>github.com/lucasbraun96/order-match-engine/api/v1;ordermatchv1b\x06proto3"
+	"\x10StreamMarketData\x12&.ordermatch.v1.StreamMarketDataRequest\x1a\x1f.ordermatch.v1.MarketDataUpdate0\x01B;Z9github.com/lbraun7/order-match-engine/api/v1;ordermatchv1b\x06proto3"
 
 var (
 	file_api_v1_order_match_proto_rawDescOnce sync.Once

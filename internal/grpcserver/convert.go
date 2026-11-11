@@ -1,9 +1,9 @@
 package grpcserver
 
 import (
-	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
-	"github.com/lucasbraun96/order-match-engine/internal/engine"
+	ordermatchv1 "github.com/lbraun7/order-match-engine/api/v1"
+	"github.com/lbraun7/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/engine"
 )
 
 func fromProtoSide(value ordermatchv1.Side) domain.Side { return domain.Side(value) }

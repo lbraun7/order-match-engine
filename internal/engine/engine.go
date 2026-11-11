@@ -8,8 +8,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
-	"github.com/lucasbraun96/order-match-engine/internal/eventlog"
+	"github.com/lbraun7/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/eventlog"
 )
 
 var (

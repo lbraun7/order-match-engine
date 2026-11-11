@@ -1,6 +1,6 @@
 # Order Matching Engine
 
-[![CI](https://github.com/lucasbraun96/order-match-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/lucasbraun96/order-match-engine/actions/workflows/ci.yml)
+[![CI](https://github.com/lbraun7/order-match-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/lbraun7/order-match-engine/actions/workflows/ci.yml)
 [![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -58,7 +58,7 @@ Requirements: Docker with Compose v2. No local Go installation is needed for
 the demo.
 
 ```sh
-git clone https://github.com/lucasbraun96/order-match-engine.git
+git clone https://github.com/lbraun7/order-match-engine.git
 cd order-match-engine
 docker compose up --build -d
 docker compose --profile demo run --rm --no-deps demo

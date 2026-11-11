@@ -1,4 +1,4 @@
-module github.com/lucasbraun96/order-match-engine
+module github.com/lbraun7/order-match-engine
 
 go 1.24.0
 

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/domain"
 )
 
 func FuzzCommandSequence(f *testing.F) {

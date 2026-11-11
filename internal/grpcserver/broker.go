@@ -3,7 +3,7 @@ package grpcserver
 import (
 	"sync"
 
-	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
+	ordermatchv1 "github.com/lbraun7/order-match-engine/api/v1"
 )
 
 type subscription struct {

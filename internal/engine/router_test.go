@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/domain"
 )
 
 func TestRouterProcessesSymbolsIndependently(t *testing.T) {

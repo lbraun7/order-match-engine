@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	ordermatchv1 "github.com/lucasbraun96/order-match-engine/api/v1"
-	"github.com/lucasbraun96/order-match-engine/internal/domain"
-	"github.com/lucasbraun96/order-match-engine/internal/engine"
+	ordermatchv1 "github.com/lbraun7/order-match-engine/api/v1"
+	"github.com/lbraun7/order-match-engine/internal/domain"
+	"github.com/lbraun7/order-match-engine/internal/engine"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"

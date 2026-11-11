@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package ordermatch.v1;
 
-option go_package = "github.com/lucasbraun96/order-match-engine/api/v1;ordermatchv1";
+option go_package = "github.com/lbraun7/order-match-engine/api/v1;ordermatchv1";
 
 service OrderMatchService {
   rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
