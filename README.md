@@ -509,6 +509,10 @@ deploy/                  Prometheus and Grafana configuration
 docs/                    architecture, semantics, ADRs, and measurements
 ```
 
+## Author
+
+Developed by [Lucas Braun](https://www.linkedin.com/in/lucas-braun-20235395/).
+
 ## License
 
 This project is available under the [MIT License](LICENSE).
