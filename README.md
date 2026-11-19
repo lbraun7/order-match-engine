@@ -4,51 +4,61 @@
 [![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A deterministic, durable, multi-symbol order matching engine written in
-Go. The project demonstrates price-time priority, one single writer per book,
-recovery from replicated append-only event logs, asynchronous Postgres projections, a
-versioned gRPC API, market-data streaming, and measured performance.
+A production-inspired, deterministic order matching engine written in Go. It
+explores how the core of an exchange can process concurrent order flow while
+preserving price-time priority, durability, reproducible recovery, and strict
+per-symbol ordering.
+
+The repository is designed as a systems-engineering portfolio project. It goes
+beyond an in-memory matching algorithm to demonstrate single-writer
+concurrency, explicit backpressure, replicated event logs, crash recovery,
+asynchronous read models, versioned APIs, observable operations, and
+evidence-driven performance work.
 
 Prices and quantities are integers: the caller owns the fixed-point scale. For
 example, `10100` can mean USD 101.00 when the chosen scale is cents.
 
 ## Why this project
 
-This is a portfolio implementation of the part of an exchange that turns
-commands into an ordered stream of book mutations and trades. It is deliberately
-more than an in-memory matching algorithm: the repository explores the system
-design around that algorithm—serialization, backpressure, crash recovery,
-idempotency, read models, streaming market data, observability, and measurable
-performance.
+An exchange matching engine must make concurrent requests behave as one
+deterministic sequence of state changes. This project focuses on that systems
+problem: turning client commands into durable, ordered book mutations and
+trades without coupling the matching core to transport, query storage, or
+monitoring infrastructure.
 
-The main engineering decisions are:
+## Engineering highlights
 
-- **Determinism over shared-state concurrency:** one writer owns each book;
-- **Parallelism between instruments:** independent symbols run on independent
-  queues and goroutines;
-- **Durability before visibility:** a command is flushed to the configured logs
-  before it mutates memory or becomes visible to the caller;
-- **A small synchronous core:** gRPC, Postgres, Prometheus, and profiling stay
-  outside the domain and matching packages;
-- **Evidence-driven optimization:** benchmarks and profiles are committed as a
-  reproducible process, and an alternative price index was rejected when its
-  measured gain did not justify its complexity.
+| Challenge | Decision | Result |
+| --- | --- | --- |
+| Deterministic command ordering | One goroutine owns each symbol's order book | Matching and FIFO priority never depend on lock timing or client timestamps |
+| Multi-core scalability | Symbols use independent queues and single-writer engines | Instruments run in parallel without multiple writers inside one book |
+| Overload protection | Submission uses bounded, non-blocking queues | Backpressure is explicit instead of becoming unbounded memory growth |
+| Durable acceptance | Commands are checksummed and `fsync`ed before memory changes | A successful mutation has a clear persistence boundary |
+| Storage damage and restart | Replicated logs are reconciled, then snapshots and deterministic replay restore state | Missing, truncated, and corrupt copies can be repaired without guessing divergent histories |
+| Database availability | PostgreSQL projections run asynchronously from the event log | Matching continues while query models are unavailable or catching up |
+| Market-data consistency | Streams begin with a snapshot and carry contiguous sequence metadata | Consumers can detect gaps and reconnect instead of silently accepting incomplete state |
+| Performance decisions | Benchmarks, fuzzing, race tests, and profiles are reproducible | Optimizations are accepted or rejected using measured evidence |
 
-> This is an educational and portfolio system, not a production exchange. It
-> has no account ledger, pre-trade risk, settlement, distributed consensus, or
-> authentication. The complete boundary is documented in
+> This is a production-inspired educational and portfolio system, not a
+> production exchange. It intentionally focuses on matching, ordering,
+> durability, and recovery; it does not include an account ledger, pre-trade
+> risk, settlement, distributed consensus, or authentication. The complete
+> boundary is documented in
 > [`docs/limitations.md`](docs/limitations.md).
 
 ## Contents
 
+- [Engineering highlights](#engineering-highlights)
 - [Quick start](#quick-start)
+- [Matching example](#matching-example)
 - [Architecture](#architecture)
 - [How a command becomes a trade](#how-a-command-becomes-a-trade)
 - [Order semantics](#order-semantics)
 - [Durability, recovery, and projections](#durability-recovery-and-projections)
 - [API and market data](#api-and-market-data)
+- [Architectural decisions](#architectural-decisions)
 - [Run locally](#run-locally)
-- [Step-by-step test guide](#step-by-step-test-guide)
+- [Testing](#testing)
 - [Performance](#performance)
 - [Repository map](#repository-map)
 
@@ -100,6 +110,34 @@ the event logs, Postgres data, Prometheus data, and dashboards. To delete those
 volumes too, use `docker compose down --volumes` only when that data is no
 longer needed.
 
+## Matching example
+
+Suppose the book already contains this resting order:
+
+| Role | Side | Limit price | Quantity | Status |
+| --- | --- | ---: | ---: | --- |
+| Maker | Sell | `10100` | `5` | Resting on the ask side |
+
+A new order arrives:
+
+| Role | Side | Limit price | Quantity | Behavior |
+| --- | --- | ---: | ---: | --- |
+| Taker | Buy | `10200` | `3` | Crosses the best available ask |
+
+The engine executes `3` units at `10100`, the resting maker's price. The buy
+order becomes filled, while `2` units of the sell order remain at the front of
+the ask side:
+
+```text
+trade             3 @ 10100
+incoming buy      FILLED
+remaining ask     2 @ 10100
+```
+
+This illustrates the core rules: the best price executes first, FIFO decides
+between orders at the same price, and trades use the maker's price. The book
+cannot remain crossed after the command completes.
+
 ## Architecture
 
 ```mermaid
@@ -125,17 +163,8 @@ and projection checkpoint. Different symbols run in parallel; each individual
 book retains exactly one writer.
 
 The core matching packages do not import gRPC, Postgres, or Prometheus. See
-[`docs/architecture.md`](docs/architecture.md) for the write/recovery paths and
-package boundaries, and the ADRs for the trade-offs behind the design:
-
-- [book structure](docs/adr/0001-order-book-structure.md);
-- [single-writer concurrency](docs/adr/0002-single-writer-engine.md);
-- [event-log durability](docs/adr/0003-event-log-and-recovery.md);
-- [asynchronous projections](docs/adr/0004-asynchronous-postgres-projections.md);
-- [multi-symbol routing](docs/adr/0005-multi-symbol-router.md);
-- [price-index evidence gate](docs/adr/0006-price-index-evidence.md);
-- [advanced order semantics](docs/adr/0007-advanced-order-semantics.md);
-- [synchronous log replication](docs/adr/0008-replicated-event-log.md).
+[`docs/architecture.md`](docs/architecture.md) for the complete write and
+recovery paths and package boundaries.
 
 ## How a command becomes a trade
 
@@ -212,6 +241,47 @@ Postgres contains disposable query models (`orders`, `order_history`, and
 transaction, making retries idempotent. If Postgres is down, matching continues
 and projection catches up from the durable log after the database returns.
 
+## API and market data
+
+Every RPC requires a case-sensitive, opaque `symbol`; `PlaceOrder` also
+requires `client_order_id`. Repeating the same client ID and payload in the
+same process and symbol returns the original response. Reusing it with a
+different payload returns gRPC `ALREADY_EXISTS`.
+
+A market-data subscription receives a snapshot first. Deltas contain
+`previous_sequence` and `sequence`; a mismatch is a gap and the client must
+reconnect for a fresh snapshot. Slow consumers are disconnected with
+`RESOURCE_EXHAUSTED` rather than silently losing updates.
+
+The versioned protobuf contract is
+[`api/v1/order_match.proto`](api/v1/order_match.proto) and exposes:
+
+| RPC | Purpose |
+| --- | --- |
+| `PlaceOrder` | Submit limit, market, stop, or iceberg orders |
+| `CancelOrder` | Cancel one open or dormant order |
+| `MassCancel` | Cancel a symbol or one participant across known symbols |
+| `GetOrder` | Read one order from the serialized engine state |
+| `GetBookSnapshot` | Read a consistent visible bid/ask snapshot |
+| `StreamMarketData` | Receive a snapshot followed by sequenced deltas |
+
+## Architectural decisions
+
+The repository includes Architecture Decision Records (ADRs) so that design
+choices, rejected alternatives, and accepted costs remain reviewable instead
+of being documented only after implementation.
+
+| Decision | Rationale | Accepted trade-off |
+| --- | --- | --- |
+| [Sorted price slices with mapped FIFO levels](docs/adr/0001-order-book-structure.md) | Best-level access stays simple while linked lists preserve FIFO and support direct cancellation | Inserting a new price level requires an O(n) slice shift |
+| [One writer per order book](docs/adr/0002-single-writer-engine.md) | Serial ownership makes matching, snapshots, and priority deterministic without fine-grained locks | One slow command delays later work for the same symbol |
+| [Durable command event log](docs/adr/0003-event-log-and-recovery.md) | Compact client commands can deterministically regenerate orders, fills, and book state | Every accepted mutation pays for a synchronous storage flush |
+| [Asynchronous PostgreSQL projections](docs/adr/0004-asynchronous-postgres-projections.md) | Query storage cannot make matching unavailable or add database latency to acceptance | Read models may temporarily lag behind the source-of-truth log |
+| [Independent engines per symbol](docs/adr/0005-multi-symbol-router.md) | Instruments scale across CPU cores while retaining one writer inside each book | There is no atomic mutation across symbols |
+| [Evidence gate for the price index](docs/adr/0006-price-index-evidence.md) | A heap was slower at shallow depth and only about 18% faster for isolated 10,000-level insertion | The simpler sorted slice remains until representative workloads justify extra complexity |
+| [Advanced orders as deterministic derived state](docs/adr/0007-advanced-order-semantics.md) | Stops, icebergs, FOK, and STP can be reproduced from the original command stream | Semantic changes require explicit event-version compatibility |
+| [Synchronous local log replication](docs/adr/0008-replicated-event-log.md) | A second path demonstrates repair and corruption handling without claiming distributed consensus | Two `fsync` operations add latency and still do not provide host-level failover |
+
 ## Run locally
 
 Go 1.24 or newer is required.
@@ -239,14 +309,9 @@ go run ./cmd/order-match-engine \
   -database-url='postgres://order_match:order_match@localhost:5433/order_match?sslmode=disable'
 ```
 
-An order is accepted only after its command record is completely written and
-flushed to the primary and, when configured, the replica. Startup reconciles identical or prefix-related
-copies, repairs a missing/truncated/corrupt peer from the valid copy, restores a
-valid snapshot, and replays the remaining log. Conflicting replica histories,
-unsupported records, or non-contiguous sequences stop startup.
-Postgres is not on the matching critical path. If it is temporarily
-unavailable, bounded retries are logged and later polling resumes from the
-unchanged projection checkpoint.
+The durability, recovery, and projection behavior described above is enabled by
+these flags; PostgreSQL remains optional and outside the matching critical
+path.
 
 Rebuild all Postgres query tables from the source-of-truth event logs with:
 
@@ -256,44 +321,28 @@ go run ./cmd/order-match-engine \
   -rebuild-projections
 ```
 
-## API and market data
+## Testing
 
-Every RPC requires a case-sensitive, opaque `symbol`; `PlaceOrder` also
-requires `client_order_id`. Repeating the same client ID and payload in the
-same process and symbol returns the original response. Reusing it with a
-different payload returns gRPC `ALREADY_EXISTS`.
+The CI pipeline applies the database migrations and runs formatting checks,
+the complete Go test suite, static analysis, and the race detector. The test
+strategy covers different failure surfaces rather than relying only on happy
+path unit tests:
 
-A market-data subscription receives a snapshot first. Deltas contain
-`previous_sequence` and `sequence`; a mismatch is a gap and the client must
-reconnect for a fresh snapshot. Slow consumers are disconnected with
-`RESOURCE_EXHAUSTED` rather than silently losing updates.
-
-The versioned protobuf contract is
-[`api/v1/order_match.proto`](api/v1/order_match.proto) and exposes:
-
-| RPC | Purpose |
+| Evidence | What it verifies |
 | --- | --- |
-| `PlaceOrder` | Submit limit, market, stop, or iceberg orders |
-| `CancelOrder` | Cancel one open or dormant order |
-| `MassCancel` | Cancel a symbol or one participant across known symbols |
-| `GetOrder` | Read one order from the serialized engine state |
-| `GetBookSnapshot` | Read a consistent visible bid/ask snapshot |
-| `StreamMarketData` | Receive a snapshot followed by sequenced deltas |
+| Domain and matcher tests | Validation, price-time priority, FIFO, quantity conservation, advanced orders, and cancellation |
+| Concurrent-producer and queue tests | Single-writer serialization, bounded backpressure, shutdown, and symbol isolation |
+| Recovery and replica tests | Snapshot replay, checksum validation, repair of missing or damaged copies, and rejection of divergent histories |
+| gRPC and stream tests | Error mapping, idempotency, multi-symbol behavior, sequenced deltas, and slow-consumer disconnection |
+| PostgreSQL integration test | Transactional projection updates, idempotent retries, and checkpoint advancement |
+| Race detector and fuzz targets | Shared-state safety, arbitrary command sequences, snapshot restoration, and event-log parsing |
+| Benchmarks and load generator | Matcher cost, symbol scalability, allocations, and durable end-to-end latency |
 
-## Step-by-step test guide
+### 1. End-to-end demo
 
-### 1. Portfolio demo (recommended first run)
-
-Requirements: Docker Engine with Compose v2. No local Go toolchain is needed.
-
-```sh
-docker compose up --build -d
-docker compose ps
-docker compose --profile demo run --rm --no-deps demo
-```
-
-Confirm the demo reports one trade at `10100` for quantity `3` and leaves an
-ask quantity of `2`. Then inspect the running system:
+Start with the [quick start](#quick-start), confirm one trade at `10100` for
+quantity `3`, and verify that `2` units remain on the ask. Then inspect the
+running system:
 
 ```sh
 docker compose logs --tail=100 order-match-engine
@@ -392,6 +441,22 @@ To erase all local engine, replica, Postgres, Prometheus, and Grafana data, use
 
 ## Performance
 
+Reference measurements are reported separately for the in-memory matcher and
+the durable public path because they measure different systems:
+
+| Scope | Reference result |
+| --- | ---: |
+| Rest one limit order in memory | `701.6 ns/op` |
+| Match one maker and taker in memory | `1.293 µs/op` |
+| Cancel one resting order in memory | `742.4 ns/op` |
+| Durable gRPC path, 16 clients | `247.4 requests/s`, `75.1 ms` p99 |
+
+These results were captured on an Apple M4 with Go 1.27. The matcher numbers
+exclude gRPC and disk I/O; the end-to-end result includes synchronous event-log
+flushes, which intentionally dominate latency. They are reproducible evidence
+from one environment, not capacity promises for other hardware or durability
+settings.
+
 Reproduce matcher benchmarks and profiles with:
 
 ```sh
@@ -399,10 +464,8 @@ Reproduce matcher benchmarks and profiles with:
 ./scripts/profile.sh
 ```
 
-[`docs/performance.md`](docs/performance.md) records the environment,
-parameters, reference results, allocations, limitations, profiles, and the
-measured optimization. The numbers are evidence from one machine, not a
-throughput promise.
+[`docs/performance.md`](docs/performance.md) records the full methodology,
+parameters, allocations, profiles, limitations, and measured optimization.
 
 ## Repository map
 
