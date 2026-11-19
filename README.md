@@ -60,6 +60,7 @@ monitoring infrastructure.
 - [Run locally](#run-locally)
 - [Testing](#testing)
 - [Performance](#performance)
+- [Production boundaries and next steps](#production-boundaries-and-next-steps)
 - [Repository map](#repository-map)
 
 ## Quick start
@@ -467,6 +468,27 @@ Reproduce matcher benchmarks and profiles with:
 [`docs/performance.md`](docs/performance.md) records the full methodology,
 parameters, allocations, profiles, limitations, and measured optimization.
 
+## Production boundaries and next steps
+
+This project intentionally concentrates on deterministic matching, command
+ordering, durability, and recovery. Operating an exchange that handles real
+value would require additional financial, security, and distributed-systems
+boundaries:
+
+| Boundary | Current scope | Production evolution |
+| --- | --- | --- |
+| Financial integrity | No accounts, balances, fees, pre-trade risk, or settlement | Add an auditable ledger, reservation model, participant limits, fees, and settlement workflows |
+| High availability | One process with two synchronously flushed local log paths | Introduce remote replication, consensus, leader fencing, quorum, and automated failover |
+| Security | No TLS, authentication, authorization, tenant isolation, or rate limiting | Add encrypted transport, workload or client identity, scoped permissions, quotas, and audit actors |
+| Instrument governance | Symbols are opaque strings with caller-defined integer scales | Add an instrument catalog with tick size, lot size, currency, trading status, and session controls |
+| Client recovery | Idempotency is in memory and market data has no replay-by-offset endpoint | Persist deduplication state and provide resumable streams or retained deltas |
+| Log operations | Logs are append-only without online compaction, archival, or backup tooling | Add retention policy, compaction, verified backups, restore drills, and operator diagnostics |
+| Durable throughput | Each accepted mutation performs synchronous storage flushes | Evaluate batching or group commit while preserving a precise acceptance boundary |
+
+These are not hidden behind a "production-ready" label. The detailed limits,
+failure implications, and verification work still worth adding are documented
+in [`docs/limitations.md`](docs/limitations.md).
+
 ## Repository map
 
 ```text
@@ -484,9 +506,6 @@ migrations/              versioned Postgres schema
 deploy/                  Prometheus and Grafana configuration
 docs/                    architecture, semantics, ADRs, and measurements
 ```
-
-Known limitations and concrete next steps are documented in
-[`docs/limitations.md`](docs/limitations.md).
 
 ## License
 
