@@ -15,6 +15,8 @@ concurrency, explicit backpressure, replicated event logs, crash recovery,
 asynchronous read models, versioned APIs, observable operations, and
 evidence-driven performance work.
 
+![Order Matching Engine system overview](docs/assets/system-overview.svg)
+
 Prices and quantities are integers: the caller owns the fixed-point scale. For
 example, `10100` can mean USD 101.00 when the chosen scale is cents.
 
