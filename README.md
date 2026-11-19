@@ -9,7 +9,7 @@ explores how the core of an exchange can process concurrent order flow while
 preserving price-time priority, durability, reproducible recovery, and strict
 per-symbol ordering.
 
-The repository is designed as a systems-engineering portfolio project. It goes
+The repository is designed as a systems-engineering project. It goes
 beyond an in-memory matching algorithm to demonstrate single-writer
 concurrency, explicit backpressure, replicated event logs, crash recovery,
 asynchronous read models, versioned APIs, observable operations, and
@@ -30,18 +30,18 @@ monitoring infrastructure.
 
 ## Engineering highlights
 
-| Challenge | Decision | Result |
-| --- | --- | --- |
-| Deterministic command ordering | One goroutine owns each symbol's order book | Matching and FIFO priority never depend on lock timing or client timestamps |
-| Multi-core scalability | Symbols use independent queues and single-writer engines | Instruments run in parallel without multiple writers inside one book |
-| Overload protection | Submission uses bounded, non-blocking queues | Backpressure is explicit instead of becoming unbounded memory growth |
-| Durable acceptance | Commands are checksummed and `fsync`ed before memory changes | A successful mutation has a clear persistence boundary |
-| Storage damage and restart | Replicated logs are reconciled, then snapshots and deterministic replay restore state | Missing, truncated, and corrupt copies can be repaired without guessing divergent histories |
-| Database availability | PostgreSQL projections run asynchronously from the event log | Matching continues while query models are unavailable or catching up |
-| Market-data consistency | Streams begin with a snapshot and carry contiguous sequence metadata | Consumers can detect gaps and reconnect instead of silently accepting incomplete state |
-| Performance decisions | Benchmarks, fuzzing, race tests, and profiles are reproducible | Optimizations are accepted or rejected using measured evidence |
+| Challenge                      | Decision                                                                              | Result                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Deterministic command ordering | One goroutine owns each symbol's order book                                           | Matching and FIFO priority never depend on lock timing or client timestamps                 |
+| Multi-core scalability         | Symbols use independent queues and single-writer engines                              | Instruments run in parallel without multiple writers inside one book                        |
+| Overload protection            | Submission uses bounded, non-blocking queues                                          | Backpressure is explicit instead of becoming unbounded memory growth                        |
+| Durable acceptance             | Commands are checksummed and `fsync`ed before memory changes                          | A successful mutation has a clear persistence boundary                                      |
+| Storage damage and restart     | Replicated logs are reconciled, then snapshots and deterministic replay restore state | Missing, truncated, and corrupt copies can be repaired without guessing divergent histories |
+| Database availability          | PostgreSQL projections run asynchronously from the event log                          | Matching continues while query models are unavailable or catching up                        |
+| Market-data consistency        | Streams begin with a snapshot and carry contiguous sequence metadata                  | Consumers can detect gaps and reconnect instead of silently accepting incomplete state      |
+| Performance decisions          | Benchmarks, fuzzing, race tests, and profiles are reproducible                        | Optimizations are accepted or rejected using measured evidence                              |
 
-> This is a production-inspired educational and portfolio system, not a
+> This is a production-inspired educational, not a
 > production exchange. It intentionally focuses on matching, ordering,
 > durability, and recovery; it does not include an account ledger, pre-trade
 > risk, settlement, distributed consensus, or authentication. The complete
@@ -100,13 +100,13 @@ their numeric wire-compatible values.
 
 The stack includes:
 
-| Component | Address | Purpose |
-| --- | --- | --- |
-| gRPC API | `localhost:50051` | Commands, queries, and market data |
-| Metrics and pprof | <http://localhost:9090> | Prometheus metrics and Go profiles |
-| Prometheus | <http://localhost:9091> | Metrics storage and queries |
-| Grafana | <http://localhost:3000> | Provisioned dashboard, no login required |
-| Postgres | `localhost:5433` | Asynchronous query projections |
+| Component         | Address                 | Purpose                                  |
+| ----------------- | ----------------------- | ---------------------------------------- |
+| gRPC API          | `localhost:50051`       | Commands, queries, and market data       |
+| Metrics and pprof | <http://localhost:9090> | Prometheus metrics and Go profiles       |
+| Prometheus        | <http://localhost:9091> | Metrics storage and queries              |
+| Grafana           | <http://localhost:3000> | Provisioned dashboard, no login required |
+| Postgres          | `localhost:5433`        | Asynchronous query projections           |
 
 Stop the stack with `docker compose down`. Named volumes intentionally retain
 the event logs, Postgres data, Prometheus data, and dashboards. To delete those
@@ -117,15 +117,15 @@ longer needed.
 
 Suppose the book already contains this resting order:
 
-| Role | Side | Limit price | Quantity | Status |
-| --- | --- | ---: | ---: | --- |
-| Maker | Sell | `10100` | `5` | Resting on the ask side |
+| Role  | Side | Limit price | Quantity | Status                  |
+| ----- | ---- | ----------: | -------: | ----------------------- |
+| Maker | Sell |     `10100` |      `5` | Resting on the ask side |
 
 A new order arrives:
 
-| Role | Side | Limit price | Quantity | Behavior |
-| --- | --- | ---: | ---: | --- |
-| Taker | Buy | `10200` | `3` | Crosses the best available ask |
+| Role  | Side | Limit price | Quantity | Behavior                       |
+| ----- | ---- | ----------: | -------: | ------------------------------ |
+| Taker | Buy  |     `10200` |      `3` | Crosses the best available ask |
 
 The engine executes `3` units at `10100`, the resting maker's price. The buy
 order becomes filled, while `2` units of the sell order remain at the front of
@@ -259,14 +259,14 @@ reconnect for a fresh snapshot. Slow consumers are disconnected with
 The versioned protobuf contract is
 [`api/v1/order_match.proto`](api/v1/order_match.proto) and exposes:
 
-| RPC | Purpose |
-| --- | --- |
-| `PlaceOrder` | Submit limit, market, stop, or iceberg orders |
-| `CancelOrder` | Cancel one open or dormant order |
-| `MassCancel` | Cancel a symbol or one participant across known symbols |
-| `GetOrder` | Read one order from the serialized engine state |
-| `GetBookSnapshot` | Read a consistent visible bid/ask snapshot |
-| `StreamMarketData` | Receive a snapshot followed by sequenced deltas |
+| RPC                | Purpose                                                 |
+| ------------------ | ------------------------------------------------------- |
+| `PlaceOrder`       | Submit limit, market, stop, or iceberg orders           |
+| `CancelOrder`      | Cancel one open or dormant order                        |
+| `MassCancel`       | Cancel a symbol or one participant across known symbols |
+| `GetOrder`         | Read one order from the serialized engine state         |
+| `GetBookSnapshot`  | Read a consistent visible bid/ask snapshot              |
+| `StreamMarketData` | Receive a snapshot followed by sequenced deltas         |
 
 ## Architectural decisions
 
@@ -274,16 +274,16 @@ The repository includes Architecture Decision Records (ADRs) so that design
 choices, rejected alternatives, and accepted costs remain reviewable instead
 of being documented only after implementation.
 
-| Decision | Rationale | Accepted trade-off |
-| --- | --- | --- |
-| [Sorted price slices with mapped FIFO levels](docs/adr/0001-order-book-structure.md) | Best-level access stays simple while linked lists preserve FIFO and support direct cancellation | Inserting a new price level requires an O(n) slice shift |
-| [One writer per order book](docs/adr/0002-single-writer-engine.md) | Serial ownership makes matching, snapshots, and priority deterministic without fine-grained locks | One slow command delays later work for the same symbol |
-| [Durable command event log](docs/adr/0003-event-log-and-recovery.md) | Compact client commands can deterministically regenerate orders, fills, and book state | Every accepted mutation pays for a synchronous storage flush |
-| [Asynchronous PostgreSQL projections](docs/adr/0004-asynchronous-postgres-projections.md) | Query storage cannot make matching unavailable or add database latency to acceptance | Read models may temporarily lag behind the source-of-truth log |
-| [Independent engines per symbol](docs/adr/0005-multi-symbol-router.md) | Instruments scale across CPU cores while retaining one writer inside each book | There is no atomic mutation across symbols |
-| [Evidence gate for the price index](docs/adr/0006-price-index-evidence.md) | A heap was slower at shallow depth and only about 18% faster for isolated 10,000-level insertion | The simpler sorted slice remains until representative workloads justify extra complexity |
-| [Advanced orders as deterministic derived state](docs/adr/0007-advanced-order-semantics.md) | Stops, icebergs, FOK, and STP can be reproduced from the original command stream | Semantic changes require explicit event-version compatibility |
-| [Synchronous local log replication](docs/adr/0008-replicated-event-log.md) | A second path demonstrates repair and corruption handling without claiming distributed consensus | Two `fsync` operations add latency and still do not provide host-level failover |
+| Decision                                                                                    | Rationale                                                                                         | Accepted trade-off                                                                       |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [Sorted price slices with mapped FIFO levels](docs/adr/0001-order-book-structure.md)        | Best-level access stays simple while linked lists preserve FIFO and support direct cancellation   | Inserting a new price level requires an O(n) slice shift                                 |
+| [One writer per order book](docs/adr/0002-single-writer-engine.md)                          | Serial ownership makes matching, snapshots, and priority deterministic without fine-grained locks | One slow command delays later work for the same symbol                                   |
+| [Durable command event log](docs/adr/0003-event-log-and-recovery.md)                        | Compact client commands can deterministically regenerate orders, fills, and book state            | Every accepted mutation pays for a synchronous storage flush                             |
+| [Asynchronous PostgreSQL projections](docs/adr/0004-asynchronous-postgres-projections.md)   | Query storage cannot make matching unavailable or add database latency to acceptance              | Read models may temporarily lag behind the source-of-truth log                           |
+| [Independent engines per symbol](docs/adr/0005-multi-symbol-router.md)                      | Instruments scale across CPU cores while retaining one writer inside each book                    | There is no atomic mutation across symbols                                               |
+| [Evidence gate for the price index](docs/adr/0006-price-index-evidence.md)                  | A heap was slower at shallow depth and only about 18% faster for isolated 10,000-level insertion  | The simpler sorted slice remains until representative workloads justify extra complexity |
+| [Advanced orders as deterministic derived state](docs/adr/0007-advanced-order-semantics.md) | Stops, icebergs, FOK, and STP can be reproduced from the original command stream                  | Semantic changes require explicit event-version compatibility                            |
+| [Synchronous local log replication](docs/adr/0008-replicated-event-log.md)                  | A second path demonstrates repair and corruption handling without claiming distributed consensus  | Two `fsync` operations add latency and still do not provide host-level failover          |
 
 ## Run locally
 
@@ -331,15 +331,15 @@ the complete Go test suite, static analysis, and the race detector. The test
 strategy covers different failure surfaces rather than relying only on happy
 path unit tests:
 
-| Evidence | What it verifies |
-| --- | --- |
-| Domain and matcher tests | Validation, price-time priority, FIFO, quantity conservation, advanced orders, and cancellation |
-| Concurrent-producer and queue tests | Single-writer serialization, bounded backpressure, shutdown, and symbol isolation |
-| Recovery and replica tests | Snapshot replay, checksum validation, repair of missing or damaged copies, and rejection of divergent histories |
-| gRPC and stream tests | Error mapping, idempotency, multi-symbol behavior, sequenced deltas, and slow-consumer disconnection |
-| PostgreSQL integration test | Transactional projection updates, idempotent retries, and checkpoint advancement |
-| Race detector and fuzz targets | Shared-state safety, arbitrary command sequences, snapshot restoration, and event-log parsing |
-| Benchmarks and load generator | Matcher cost, symbol scalability, allocations, and durable end-to-end latency |
+| Evidence                            | What it verifies                                                                                                |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Domain and matcher tests            | Validation, price-time priority, FIFO, quantity conservation, advanced orders, and cancellation                 |
+| Concurrent-producer and queue tests | Single-writer serialization, bounded backpressure, shutdown, and symbol isolation                               |
+| Recovery and replica tests          | Snapshot replay, checksum validation, repair of missing or damaged copies, and rejection of divergent histories |
+| gRPC and stream tests               | Error mapping, idempotency, multi-symbol behavior, sequenced deltas, and slow-consumer disconnection            |
+| PostgreSQL integration test         | Transactional projection updates, idempotent retries, and checkpoint advancement                                |
+| Race detector and fuzz targets      | Shared-state safety, arbitrary command sequences, snapshot restoration, and event-log parsing                   |
+| Benchmarks and load generator       | Matcher cost, symbol scalability, allocations, and durable end-to-end latency                                   |
 
 ### 1. End-to-end demo
 
@@ -447,12 +447,12 @@ To erase all local engine, replica, Postgres, Prometheus, and Grafana data, use
 Reference measurements are reported separately for the in-memory matcher and
 the durable public path because they measure different systems:
 
-| Scope | Reference result |
-| --- | ---: |
-| Rest one limit order in memory | `701.6 ns/op` |
-| Match one maker and taker in memory | `1.293 µs/op` |
-| Cancel one resting order in memory | `742.4 ns/op` |
-| Durable gRPC path, 16 clients | `247.4 requests/s`, `75.1 ms` p99 |
+| Scope                               |                  Reference result |
+| ----------------------------------- | --------------------------------: |
+| Rest one limit order in memory      |                     `701.6 ns/op` |
+| Match one maker and taker in memory |                     `1.293 µs/op` |
+| Cancel one resting order in memory  |                     `742.4 ns/op` |
+| Durable gRPC path, 16 clients       | `247.4 requests/s`, `75.1 ms` p99 |
 
 These results were captured on an Apple M4 with Go 1.27. The matcher numbers
 exclude gRPC and disk I/O; the end-to-end result includes synchronous event-log
@@ -477,15 +477,15 @@ ordering, durability, and recovery. Operating an exchange that handles real
 value would require additional financial, security, and distributed-systems
 boundaries:
 
-| Boundary | Current scope | Production evolution |
-| --- | --- | --- |
-| Financial integrity | No accounts, balances, fees, pre-trade risk, or settlement | Add an auditable ledger, reservation model, participant limits, fees, and settlement workflows |
-| High availability | One process with two synchronously flushed local log paths | Introduce remote replication, consensus, leader fencing, quorum, and automated failover |
-| Security | No TLS, authentication, authorization, tenant isolation, or rate limiting | Add encrypted transport, workload or client identity, scoped permissions, quotas, and audit actors |
-| Instrument governance | Symbols are opaque strings with caller-defined integer scales | Add an instrument catalog with tick size, lot size, currency, trading status, and session controls |
-| Client recovery | Idempotency is in memory and market data has no replay-by-offset endpoint | Persist deduplication state and provide resumable streams or retained deltas |
-| Log operations | Logs are append-only without online compaction, archival, or backup tooling | Add retention policy, compaction, verified backups, restore drills, and operator diagnostics |
-| Durable throughput | Each accepted mutation performs synchronous storage flushes | Evaluate batching or group commit while preserving a precise acceptance boundary |
+| Boundary              | Current scope                                                               | Production evolution                                                                               |
+| --------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Financial integrity   | No accounts, balances, fees, pre-trade risk, or settlement                  | Add an auditable ledger, reservation model, participant limits, fees, and settlement workflows     |
+| High availability     | One process with two synchronously flushed local log paths                  | Introduce remote replication, consensus, leader fencing, quorum, and automated failover            |
+| Security              | No TLS, authentication, authorization, tenant isolation, or rate limiting   | Add encrypted transport, workload or client identity, scoped permissions, quotas, and audit actors |
+| Instrument governance | Symbols are opaque strings with caller-defined integer scales               | Add an instrument catalog with tick size, lot size, currency, trading status, and session controls |
+| Client recovery       | Idempotency is in memory and market data has no replay-by-offset endpoint   | Persist deduplication state and provide resumable streams or retained deltas                       |
+| Log operations        | Logs are append-only without online compaction, archival, or backup tooling | Add retention policy, compaction, verified backups, restore drills, and operator diagnostics       |
+| Durable throughput    | Each accepted mutation performs synchronous storage flushes                 | Evaluate batching or group commit while preserving a precise acceptance boundary                   |
 
 These are not hidden behind a "production-ready" label. The detailed limits,
 failure implications, and verification work still worth adding are documented
